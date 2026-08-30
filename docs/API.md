@@ -212,3 +212,30 @@ consequences (binding):
   scope's AP (e.g. user report: ASUS RP-AC53, scope ~10 m from repeater,
   through two walls). For Kyle's setup, a client-bridge near the scope that
   backhauls to the Ubiquiti LAN would let the desktop pull without moving.
+
+## Live findings — Odyssey Pro, Kyle's scope (2026-08-30, first contact)
+
+Server: nginx/1.22.1. Listing: 15 observations, 14,959 bytes in 0.4 s — fast,
+and **no bare NaN** on this firmware (keep the NaN guard anyway).
+
+**Full observation field set** (§9 Q2 answered; real fixture pending scrub):
+`alt, darkframe_timestamp, dec, depth, expo, gain, lat, long, name,
+nameTarget, nb_frames, object_id, obsId, obs_attr, obs_end, obs_start,
+obs_timestamp, period, pmode, pn, purpose, ra, resx, resy, sensor, sn, softh,
+softv, type, uid_target, uuid, vpath`
+— i.e. the catalog itself carries target display name (`nameTarget`),
+coordinates (`ra/dec/alt`), exposure/gain, sensor id, resolution
+(`resx/resy`), end time, and identifiers galore. `sn` is the SCOPE SERIAL —
+scrub from fixtures (spec §8a). vpath shape: `prod/<uuid-v1>`.
+
+**Event channel**: first GET answers immediately with
+`{"cmd":"obslist","status":"updated","disk":{"total":...,"avail":...}}` —
+the scope reports its DISK USAGE here. `doctor`/`status` should surface it
+(Kyle's scope: 56.4 GB total, 22.8 MB avail = FULL). Subsequent idle polls
+long-poll (held >8 s).
+
+**`POST cancelDownload` HANGS when there is no job to cancel** — the scope
+holds the connection instead of answering. Treat every cancel as
+fire-and-forget: short timeout, swallow TransportError (client.py already
+does; recon script fixed). Prior art's `timeout=(3,5)` + bare except was
+load-bearing, not paranoia.

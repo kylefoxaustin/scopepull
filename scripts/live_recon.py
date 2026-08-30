@@ -32,7 +32,32 @@ def log(msg: str) -> None:
     LOG.append(line)
 
 
+async def send_cancel(http: httpx.AsyncClient) -> str:
+    """Fire-and-forget cancelDownload. LIVE FINDING (2026-08-30): the scope
+    does NOT answer this POST when there is no job to cancel — it just holds
+    the connection. Short timeout, swallow everything."""
+    try:
+        r = await http.post("/api/event", json={"cmd": "cancelDownload"},
+                            timeout=httpx.Timeout(5, connect=3))
+        return f"{r.status_code} {r.text[:200]!r}"
+    except httpx.TransportError as e:
+        return f"no answer ({type(e).__name__}) — normal when no job is active"
+
+
 async def main(ip: str) -> None:
+    # Preflight: fail with one friendly line, not a traceback, when we're not
+    # on the scope's network (the #1 way this script gets run wrong).
+    import sys as _sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from scopepull.netcheck import check as netcheck_check
+
+    net = await netcheck_check(ip)
+    if not net.reachable:
+        print(f"✗ Scope at {ip} is not reachable.")
+        print(f"  {net.diagnosis(ip)}")
+        _sys.exit(3)
+
     OUT.mkdir(parents=True, exist_ok=True)
     base = f"http://{ip}"
     async with httpx.AsyncClient(base_url=base, timeout=httpx.Timeout(30, connect=10)) as http:
@@ -81,11 +106,10 @@ async def main(ip: str) -> None:
                 dt = time.monotonic() - t0
                 log(f"GET /api/event [{i}] -> READ TIMEOUT after {dt:.2f}s (long-poll held)")
 
-        # 4. cancelDownload response shape
-        r = await http.post("/api/event", json={"cmd": "cancelDownload"},
-                            timeout=httpx.Timeout(10, connect=5))
-        log(f"POST cancelDownload -> {r.status_code} body={r.text[:300]!r}")
-        (OUT / "cancel_response.txt").write_text(f"{r.status_code}\n{r.text[:4096]}")
+        # 4. cancelDownload response shape (hangs when no job — expected)
+        result = await send_cancel(http)
+        log(f"POST cancelDownload -> {result}")
+        (OUT / "cancel_response.txt").write_text(result)
 
         if not obs:
             log("no observation available for pull test; done")
@@ -96,8 +120,7 @@ async def main(ip: str) -> None:
         vp = quote(str(obs["vpath"]), safe="/")
         for fmt in ("fits", "png"):
             log(f"--- pull test: {fmt.upper()} of {obs['vpath']!r} ---")
-            await http.post("/api/event", json={"cmd": "cancelDownload"},
-                            timeout=httpx.Timeout(10, connect=5))
+            log(f"  cancel: {await send_cancel(http)}")
             await asyncio.sleep(1)
             stop = asyncio.Event()
 
@@ -163,8 +186,7 @@ async def main(ip: str) -> None:
             except zipfile.BadZipFile:
                 log(f"  VERDICT [{fmt}]: NOT A ZIP ✗ ({dest.stat().st_size} bytes)")
 
-        await http.post("/api/event", json={"cmd": "cancelDownload"},
-                        timeout=httpx.Timeout(10, connect=5))
+        await send_cancel(http)
     (OUT / "capture.log").write_text("\n".join(LOG) + "\n")
     log(f"recon complete -> {OUT}/")
 
