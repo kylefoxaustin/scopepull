@@ -26,7 +26,7 @@ and the open VERIFY-LIVE items.
 
 ```bash
 uv tool install scopepull    # or: pipx install scopepull
-# join the scope's Wi-Fi (UNI-xxxx / eVscope-xxxx)
+# join the scope's Wi-Fi (Odyssey-xxxx on Odyssey/Pro; UNI-xxxx / eVscope-xxxx on older models)
 scopepull doctor             # connectivity + DDD check
 scopepull                    # pull everything new
 ```

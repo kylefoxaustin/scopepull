@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from .platform import current_ssids
 
-SCOPE_SSID_PREFIXES = ("UNI-", "eVscope-")
+SCOPE_SSID_PREFIXES = ("Odyssey-", "UNI-", "eVscope-")
 
 
 @dataclass(frozen=True)
@@ -30,9 +30,9 @@ class NetStatus:
             joined = ", ".join(self.ssids)
             return (
                 f"Connected to {joined!r}, not a scope network — join the "
-                "UNI-xxxx / eVscope-xxxx Wi-Fi and retry."
+                "Odyssey-xxxx / UNI-xxxx / eVscope-xxxx Wi-Fi and retry."
             )
-        return "No Wi-Fi connection detected — join the scope's UNI-xxxx / eVscope-xxxx network."
+        return "No Wi-Fi connection detected — join the scope's Odyssey-xxxx / UNI-xxxx / eVscope-xxxx network."
 
 
 async def tcp_reachable(host: str, port: int = 80, timeout: float = 3.0) -> bool:

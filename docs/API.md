@@ -190,3 +190,25 @@ consequences (binding):
 6. Warn loudly in README: don't operate the scope, don't let the host sleep
    mid-pull (OS sleep = dropped TCP = the bad case). Consider inhibiting
    sleep during transfers (systemd-inhibit / SetThreadExecutionState) — Phase 2.
+
+## Wi-Fi availability model (researched 2026-08-30, help.unistellar.com)
+
+- SSID is **`Odyssey-XXXX`** on Odyssey/Odyssey Pro (`UNI-xxxx`/`eVscope-xxxx`
+  are the older models). **Open network** by default (password optional,
+  user-set).
+- **AP-only. No station mode** — the scope never joins a home network; the
+  help center is explicit that it always creates its own network. §9 Q4 is
+  answered: **NO** — unattended mode requires a host (or bridge device) within
+  radio range of the scope. Prior art's `--ip` flag doesn't imply station mode.
+- **Range ≈ 10 m** (Unistellar's own number; users report ~30 ft unobstructed).
+  A desktop across the house will simply never see the AP.
+- Web UI behaviors confirmed by the DDD help article: delete + delete-all
+  exist in the UI (§9 Q3 — endpoint still needs a HAR); the scope **saves your
+  download selection server-side** (you can disconnect the phone); Unistellar
+  recommends not operating the scope during a download.
+- Known firmware issue (changelog): "no network emitted" bug was fixed in a
+  recent firmware — if the AP is invisible even up close, update firmware.
+- Range extension that works in the field: a Wi-Fi repeater joined to the
+  scope's AP (e.g. user report: ASUS RP-AC53, scope ~10 m from repeater,
+  through two walls). For Kyle's setup, a client-bridge near the scope that
+  backhauls to the Ubiquiti LAN would let the desktop pull without moving.
