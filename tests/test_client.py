@@ -1,0 +1,90 @@
+"""ScopeClient + EventPump against the mock scope (in-process ASGI transport)."""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+
+from scopepull.client import DDDNotEnabled, ScopeClient
+
+
+async def test_health(client):
+    assert await client.health() is True
+
+
+async def test_list_observations(client):
+    obs = await client.list_observations()
+    # mock has 3 entries, all with vpaths; NaN body parsed fine
+    assert len(obs) == 3
+    assert obs[0].target == "NGC 7635"
+    assert obs[2].frame_count == 0  # NaN -> 0
+
+
+async def test_ddd_disabled_detected(mock_app, scope_state):
+    scope_state["ddd_enabled"] = False
+    transport = httpx.ASGITransport(app=mock_app)
+    async with ScopeClient("http://192.168.100.1", transport=transport) as c:
+        with pytest.raises(DDDNotEnabled):
+            await c.list_observations()
+        assert await c.ddd_enabled() is False
+
+
+async def test_ddd_enabled(client):
+    assert await client.ddd_enabled() is True
+
+
+async def test_zip_gate_502_without_pump(client, scope_state):
+    """The mock reproduces evsoft's gate: no event poll -> 502."""
+    resp = await client._http.get("/api/observations/zip/fits/0x0/obs/2026-08-20/0001")
+    assert resp.status_code == 502
+
+
+async def test_zip_streams_with_pump(client, scope_state):
+    async with client.event_pump() as pump:
+        await pump.wait_ready(timeout=5)
+        resp = await client._http.get("/api/observations/zip/fits/0x0/obs/2026-08-20/0001")
+    assert resp.status_code == 200
+    assert resp.content[:2] == b"PK"
+
+
+async def test_pump_ready_means_second_cycle(client):
+    async with client.event_pump() as pump:
+        await pump.wait_ready(timeout=5)
+        assert pump.alive
+    assert not pump.alive  # cancelled on exit
+
+
+async def test_cancel_download_clears_stuck_job(client, scope_state):
+    scope_state["stuck_job"] = True
+    await client.cancel_download()
+    assert scope_state["stuck_job"] is False
+    assert scope_state["cancel_count"] == 1
+
+
+async def test_cancel_download_swallows_transport_errors():
+    """Cancel is used on abort paths where the link may be gone — never raises."""
+
+    class DeadTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            raise httpx.ConnectError("gone")
+
+    async with ScopeClient("http://192.168.100.1", transport=DeadTransport()) as c:
+        await c.cancel_download()  # must not raise
+
+
+async def test_download_progress_events(client, scope_state):
+    scope_state["events"] = [
+        {"cmd": "download", "status": "running", "progress": 42, "nb_frames": 100},
+    ]
+    async with client.event_pump() as pump:
+        await pump.wait_ready(timeout=5)
+        # give the pump a few cycles to swallow the queued event
+        import asyncio
+
+        for _ in range(50):
+            if pump.progress.frames_done:
+                break
+            await asyncio.sleep(0.02)
+    assert pump.progress.frames_done == 42
+    assert pump.progress.frames_total == 100
+    assert pump.progress.status == "running"

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+uv.lock
+# local pull data must never land in the repo
+unistellar_data/
+*.fits
+*.zip
+!tests/fixtures/*.zip

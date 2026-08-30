@@ -1,0 +1,1 @@
+[{"vpath": "obs/2026-08-20/0001", "name": "Bubble Nebula", "purpose": "science", "pmode": "Enhanced Vision", "obs_start": 1787184000000, "nb_frames": 1200, "obs_attr": {"tag_sc": "NGC 7635"}}, {"vpath": "obs/2026-08-21/0002", "name": "M 31", "purpose": "", "pmode": "Enhanced Vision", "obs_start": 1787270400000, "nb_frames": NaN, "obs_attr": {"tag_sc": "M 31"}}]
