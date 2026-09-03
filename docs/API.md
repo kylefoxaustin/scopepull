@@ -239,3 +239,29 @@ holds the connection instead of answering. Treat every cancel as
 fire-and-forget: short timeout, swallow TransportError (client.py already
 does; recon script fixed). Prior art's `timeout=(3,5)` + bare except was
 load-bearing, not paranoia.
+
+## ⚠️ FITS bug CONFIRMED on Kyle's Odyssey Pro (2026-09-01, firmware current as of that date)
+
+MEASURED, live: `zip/fits` on a 2-frame observation → valid zip, manifest.json
+only, ZERO frames. `zip/png` on the same observation → 2 frames, 2.8 MB,
+~1.9 MB/s. So the failure is per-frame (sensor frame size), not observation
+size, and it is NOT fixed by current firmware. TIFF untested as of that run —
+recon script now tests fits/tiff/png.
+
+More live facts:
+- Zip layout: `<obsTimestamp>_000/` directory containing `manifest.json` and
+  `<frameTimestamp>_StackInput.<ext>` frames (per-frame capture timestamps in
+  the names).
+- Zip stream has NO Content-Length (chunked) — byte-based progress only, plus
+  frame progress from the event channel.
+- Event during a completed small download: `{"cmd":"download","status":
+  "ended","progress":0,"nb_frames":0}` — progress fields can be zero/late on
+  tiny pulls; don't trust them for completion detection, trust the stream end
+  + zip validation.
+- `softh`/`softv` in the catalog listing likely = firmware/hardware versions —
+  read them from the captured fixture to pin the firmware this was measured on.
+
+Direction if TIFF works: pull TIFF (lossless), convert to FITS locally during
+ingest (astropy), stamping headers from manifest.json + catalog fields
+(ra/dec/expo/gain/obs timestamps). "FITS on disk" stays the deliverable; the
+scope just can't be the thing that produces it.

@@ -64,8 +64,8 @@ async def main(ip: str) -> None:
         # 1. root
         r = await http.get("/")
         log(f"GET / -> {r.status_code} {r.headers.get('content-type')} server={r.headers.get('server')!r}")
-        (OUT / "root_headers.json").write_text(json.dumps(dict(r.headers), indent=2))
-        (OUT / "root_body_head.html").write_text(r.text[:2048])
+        (OUT / "root_headers.json").write_text(json.dumps(dict(r.headers, encoding="utf-8"), indent=2))
+        (OUT / "root_body_head.html").write_text(r.text[:2048], encoding="utf-8")
 
         # 2. listing — raw bytes, verbatim
         log("GET /api/observations/list (can take a while)...")
@@ -101,7 +101,7 @@ async def main(ip: str) -> None:
                 dt = time.monotonic() - t0
                 log(f"GET /api/event [{i}] -> {r.status_code} in {dt:.2f}s body={r.text[:200]!r}")
                 (OUT / f"event_idle_{i}.txt").write_text(
-                    f"{r.status_code} in {dt:.2f}s\n{r.text[:4096]}")
+                    f"{r.status_code} in {dt:.2f}s\n{r.text[:4096]}", encoding="utf-8")
             except httpx.ReadTimeout:
                 dt = time.monotonic() - t0
                 log(f"GET /api/event [{i}] -> READ TIMEOUT after {dt:.2f}s (long-poll held)")
@@ -109,7 +109,7 @@ async def main(ip: str) -> None:
         # 4. cancelDownload response shape (hangs when no job — expected)
         result = await send_cancel(http)
         log(f"POST cancelDownload -> {result}")
-        (OUT / "cancel_response.txt").write_text(result)
+        (OUT / "cancel_response.txt").write_text(result, encoding="utf-8")
 
         if not obs:
             log("no observation available for pull test; done")
@@ -118,7 +118,7 @@ async def main(ip: str) -> None:
         # 5+6. the FITS-bug test, then PNG control
         from urllib.parse import quote
         vp = quote(str(obs["vpath"]), safe="/")
-        for fmt in ("fits", "png"):
+        for fmt in ("fits", "tiff", "png"):
             log(f"--- pull test: {fmt.upper()} of {obs['vpath']!r} ---")
             log(f"  cancel: {await send_cancel(http)}")
             await asyncio.sleep(1)
@@ -132,7 +132,7 @@ async def main(ip: str) -> None:
                                             timeout=httpx.Timeout(5 if first else 35, connect=10))
                         if rr.text.strip():
                             log(f"  [event] {rr.text[:300]!r}")
-                            (OUT / f"event_during_{fmt}.log").open("a").write(rr.text[:2048] + "\n")
+                            (OUT / f"event_during_{fmt}.log").open("a", encoding="utf-8").write(rr.text[:2048] + "\n")
                     except httpx.ReadTimeout:
                         pass
                     except httpx.TransportError as e:
@@ -187,7 +187,7 @@ async def main(ip: str) -> None:
                 log(f"  VERDICT [{fmt}]: NOT A ZIP ✗ ({dest.stat().st_size} bytes)")
 
         await send_cancel(http)
-    (OUT / "capture.log").write_text("\n".join(LOG) + "\n")
+    (OUT / "capture.log").write_text("\n".join(LOG, encoding="utf-8") + "\n")
     log(f"recon complete -> {OUT}/")
 
 
