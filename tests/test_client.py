@@ -14,10 +14,10 @@ async def test_health(client):
 
 async def test_list_observations(client):
     obs = await client.list_observations()
-    # mock has 3 entries, all with vpaths; NaN body parsed fine
-    assert len(obs) == 3
-    assert obs[0].target == "NGC 7635"
-    assert obs[2].frame_count == 0  # NaN -> 0
+    # mock has 2 entries (M101, Jupiter); NaN in Jupiter's tag_sc parses fine
+    assert len(obs) == 2
+    assert obs[0].target == "M101 - Pinwheel Galaxy"
+    assert obs[1].target == "Jupiter"
 
 
 async def test_ddd_disabled_detected(mock_app, scope_state):
@@ -35,14 +35,14 @@ async def test_ddd_enabled(client):
 
 async def test_zip_gate_502_without_pump(client, scope_state):
     """The mock reproduces evsoft's gate: no event poll -> 502."""
-    resp = await client._http.get("/api/observations/zip/fits/0x0/obs/2026-08-20/0001")
+    resp = await client._http.get("/api/observations/zip/tiff/0x0/prod/obs-0001")
     assert resp.status_code == 502
 
 
 async def test_zip_streams_with_pump(client, scope_state):
     async with client.event_pump() as pump:
         await pump.wait_ready(timeout=5)
-        resp = await client._http.get("/api/observations/zip/fits/0x0/obs/2026-08-20/0001")
+        resp = await client._http.get("/api/observations/zip/tiff/0x0/prod/obs-0001")
     assert resp.status_code == 200
     assert resp.content[:2] == b"PK"
 

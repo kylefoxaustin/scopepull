@@ -11,6 +11,10 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.7",
     "platformdirs>=4.2",
+    "astropy>=6.0",
+    "tifffile>=2024.1",
+    "imagecodecs>=2024.1",
+    "numpy>=1.26",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -63,6 +67,11 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"  # numpy's bundled stubs use 3.12 `type` statements
 strict = true
 files = ["src"]
+
+[[tool.mypy.overrides]]
+# Scientific libs ship without type stubs / py.typed markers.
+module = ["astropy.*", "tifffile.*", "imagecodecs.*"]
+ignore_missing_imports = true

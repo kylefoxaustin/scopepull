@@ -268,6 +268,21 @@ class ScopeClient:
         except httpx.TransportError:
             log.debug("cancelDownload not delivered (transport error)", exc_info=True)
 
+    # -- transfer -------------------------------------------------------------
+
+    def stream_zip(self, url: str) -> Any:
+        """Open a streaming GET for a zip export. Use as an async context manager:
+
+            async with client.stream_zip(url) as resp:
+                async for chunk in resp.aiter_bytes(...): ...
+
+        The caller must have an event pump active (see event_pump) or the scope
+        will 502 / hang — that is the export gate (docs/API.md).
+        """
+        return self._http.stream(
+            "GET", url, timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
+        )
+
     # -- events ---------------------------------------------------------------
 
     def event_pump(self) -> EventPump:

@@ -20,8 +20,11 @@ from . import __version__
 from .catalog import Observation
 from .client import DDDNotEnabled, ScopeClient, ScopeUnreachable
 from .config import Config
+from .ingest import ingest_zip
 from .manifest import Manifest
 from .netcheck import check as netcheck_check
+from .transfer import TransferError
+from .transfer import pull as transfer_pull
 
 app = typer.Typer(
     name="scopepull",
@@ -58,9 +61,8 @@ def main(
         console.print(f"scopepull {__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
-        # `scopepull` == `scopepull pull --new` (Phase 2). Until then, guide.
-        console.print("[yellow]pull is not implemented yet (Phase 2) — try:[/] scopepull list")
-        raise typer.Exit(EXIT_OK)
+        # Bare `scopepull` == `scopepull pull --new`.
+        _pull(new=True, all_=False, ip=None, since=None, target=None, fmt=None, dest=None)
 
 
 @app.command("list")
@@ -215,6 +217,100 @@ def cancel(ip: IpOpt = None) -> None:
 
     asyncio.run(go())
     console.print("Cancel sent.")
+
+
+@app.command()
+def pull(
+    ip: IpOpt = None,
+    new: Annotated[
+        bool,
+        typer.Option(
+            "--new/--all", help="Only observations not already local (default) / everything"
+        ),
+    ] = True,
+    since: Annotated[str | None, typer.Option(help="On/after DATE (YYYY-MM-DD)")] = None,
+    target: Annotated[str | None, typer.Option(help="Filter by target substring")] = None,
+    fmt: Annotated[
+        str | None, typer.Option("--format", help="fits|tiff|png (default from config)")
+    ] = None,
+    dest: Annotated[str | None, typer.Option(help="Archive root override")] = None,
+) -> None:
+    """Pull observations, verify, and ingest into the archive."""
+    _pull(new=new, all_=not new, ip=ip, since=since, target=target, fmt=fmt, dest=dest)
+
+
+def _pull(
+    *,
+    new: bool,
+    all_: bool,
+    ip: str | None,
+    since: str | None,
+    target: str | None,
+    fmt: str | None,
+    dest: str | None,
+) -> None:
+    cfg = _load_config(ip)
+    if fmt:
+        cfg.format = fmt
+    if dest:
+        from pathlib import Path
+
+        cfg.archive_root = Path(dest).expanduser()
+
+    async def go() -> int:
+        async with ScopeClient(cfg.base_url) as client:
+            try:
+                observations = await client.list_observations()
+            except ScopeUnreachable as e:
+                err_console.print(f"[red]Scope unreachable:[/] {e}")
+                return EXIT_UNREACHABLE
+            except DDDNotEnabled as e:
+                err_console.print(f"[red]{e}[/]")
+                return EXIT_DDD_DISABLED
+
+            observations = _filter(observations, since, target)
+            with Manifest() as m:
+                if new:
+                    local = m.local_ids()
+                    observations = [o for o in observations if o.obs_id not in local]
+                if not observations:
+                    console.print("[green]Nothing new to pull.[/]")
+                    return EXIT_NOTHING_NEW
+
+                console.print(f"Pulling {len(observations)} observation(s) to {cfg.archive_root}")
+                failed: list[str] = []
+                tmp_root = cfg.archive_root / "_incoming"
+                for i, obs in enumerate(observations, 1):
+                    zip_path = tmp_root / f"{obs.id_short}.zip"
+                    label = f"[{i}/{len(observations)}] {obs.target}"
+                    try:
+                        last = ""
+                        async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
+                            if ev.phase != last:
+                                console.print(
+                                    f"  {label}: {ev.phase}"
+                                    + (f" ({ev.detail})" if ev.detail else "")
+                                )
+                                last = ev.phase
+                        res = ingest_zip(zip_path, obs, cfg, m)
+                        zip_path.unlink(missing_ok=True)
+                        console.print(
+                            f"  {label}: [green]ingested[/] "
+                            f"{res.light_count} frames, {res.fits_written} FITS"
+                        )
+                    except TransferError as e:
+                        err_console.print(f"  {label}: [red]failed[/] — {e}")
+                        failed.append(obs.target)
+                        zip_path.unlink(missing_ok=True)
+
+                if failed:
+                    err_console.print(
+                        f"[yellow]{len(failed)} failed (retry next run): {', '.join(failed)}[/]"
+                    )
+                    return EXIT_PARTIAL
+                return EXIT_OK
+
+    raise typer.Exit(asyncio.run(go()))
 
 
 if __name__ == "__main__":

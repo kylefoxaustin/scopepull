@@ -18,9 +18,12 @@ lands on disk as verified, organized FITS. Linux + Windows.
 
 ## Status
 
-**Pre-alpha, under active development.** Phase 1 (library core, `list`,
-`doctor`, mock scope) — see [docs/API.md](docs/API.md) for the protocol recon
-and the open VERIFY-LIVE items.
+**Pre-alpha, under active development.** Phases 0-2 complete: protocol recon
+(validated against a real Odyssey Pro), library core, and the full
+pull -> verify -> ingest pipeline (`scopepull pull`). Deep-sky observations
+arrive as raw GBRG Bayer TIFF frames + master dark + the scope's own stack;
+ingest keeps the TIFFs and writes per-frame FITS. See [docs/API.md](docs/API.md)
+for the measured protocol details.
 
 ## Quickstart (will be)
 
