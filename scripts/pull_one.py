@@ -67,7 +67,7 @@ async def pump_loop(http: httpx.AsyncClient, stop: asyncio.Event) -> None:
 
 async def send_cancel(http: httpx.AsyncClient) -> None:
     try:
-        await http.post("/api/event", json={"cmd": "cancelDownload"}, timeout=httpx.Timeout(5, 3))
+        await http.post("/api/event", json={"cmd": "cancelDownload"}, timeout=httpx.Timeout(5, connect=3))
     except httpx.TransportError:
         pass
 
@@ -77,12 +77,17 @@ async def main(ip: str, needle: str, fmt: str) -> None:
     async with httpx.AsyncClient(base_url=f"http://{ip}", timeout=httpx.Timeout(300, connect=10)) as http:
         r = await http.get("/api/observations/list", timeout=httpx.Timeout(180, connect=10))
         items = json.loads(re.sub(r"\bNaN\b", "null", r.text))
-        match = next(
-            (o for o in items
-             if needle.lower() in str(o.get("nameTarget", "")).lower()
-             or needle.lower() in str(o.get("vpath", "")).lower()),
-            None,
-        )
+        matches = [
+            o for o in items
+            if needle.lower() in str(o.get("nameTarget", "")).lower()
+            or needle.lower() in str(o.get("vpath", "")).lower()
+        ]
+        # Smallest frame count first — never accidentally pull a 1000+ frame run.
+        matches.sort(key=lambda o: o.get("nb_frames") or 0)
+        match = matches[0] if matches else None
+        if len(matches) > 1:
+            print(f"({len(matches)} matched {needle!r}; picking smallest: "
+                  f"{matches[0].get('nb_frames')} frames)")
         if not match:
             print(f"No observation matched {needle!r}. Targets available:")
             for o in items:
