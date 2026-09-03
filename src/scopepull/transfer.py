@@ -20,6 +20,8 @@ Nothing here prints; it yields ProgressEvent objects the CLI renders.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +52,7 @@ class ProgressEvent:
     bytes_done: int = 0
     frames_done: int = 0
     frames_total: int = 0
+    elapsed_s: float = 0.0
     detail: str = ""
 
 
@@ -127,24 +130,32 @@ async def pull(
 
             # 3. Wait for the build: "started" then "ended". No cancelling.
             await pump.wait_for_started(STARTED_TIMEOUT)
-            yield ProgressEvent(
-                obs.obs_id,
-                "building",
-                frames_done=pump.progress.frames_done,
-                frames_total=pump.progress.frames_total,
-            )
-            ended = await pump.wait_for_ended(timeout)
-            if not ended:
-                raise TransferError(
-                    f"{obs.target}: build did not finish within {timeout:.0f}s "
-                    f"(reached {pump.progress.frames_done}/{pump.progress.frames_total} frames)"
+            build_start = time.monotonic()
+            deadline = build_start + timeout
+            while not pump.is_ended:
+                if not pump.alive:
+                    raise TransferError(f"{obs.target}: event pump died during build")
+                if time.monotonic() > deadline:
+                    raise TransferError(
+                        f"{obs.target}: build did not finish within {timeout:.0f}s "
+                        f"(reached {pump.progress.frames_done}/"
+                        f"{pump.progress.frames_total} frames)"
+                    )
+                yield ProgressEvent(
+                    obs.obs_id,
+                    "building",
+                    frames_done=pump.progress.frames_done,
+                    frames_total=pump.progress.frames_total,
+                    elapsed_s=time.monotonic() - build_start,
                 )
+                await asyncio.sleep(1.0)
             yield ProgressEvent(
                 obs.obs_id,
                 "building",
                 detail="ended",
                 frames_done=pump.progress.frames_total,
                 frames_total=pump.progress.frames_total,
+                elapsed_s=time.monotonic() - build_start,
             )
 
             # 4. Download the finished archive.

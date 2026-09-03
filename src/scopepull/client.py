@@ -104,6 +104,11 @@ class EventPump:
     def alive(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    @property
+    def is_ended(self) -> bool:
+        """True once the build-complete ("ended") signal has been seen."""
+        return self._ended.is_set()
+
     async def wait_ready(self, timeout: float = 30.0) -> None:
         """Block until the pump is actively re-polling, then settle."""
         try:

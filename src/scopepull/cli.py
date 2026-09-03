@@ -239,6 +239,27 @@ def pull(
     _pull(new=new, all_=not new, ip=ip, since=since, target=target, fmt=fmt, dest=dest)
 
 
+def _build_status(ev: object) -> str:
+    """Render a live build line: 'N/M frames · 2m10s · ~6m left' (best-effort ETA)."""
+    done = getattr(ev, "frames_done", 0)
+    total = getattr(ev, "frames_total", 0)
+    elapsed = getattr(ev, "elapsed_s", 0.0)
+
+    def _dur(sec: float) -> str:
+        sec = int(sec)
+        return f"{sec // 60}m{sec % 60:02d}s" if sec >= 60 else f"{sec}s"
+
+    parts = []
+    if total:
+        parts.append(f"{done}/{total} frames")
+    parts.append(_dur(elapsed))
+    if done and total and elapsed > 2 and done < total:
+        rate = done / elapsed
+        if rate > 0:
+            parts.append(f"~{_dur((total - done) / rate)} left")
+    return " · ".join(parts)
+
+
 def _pull(
     *,
     new: bool,
@@ -285,15 +306,19 @@ def _pull(
                     label = f"[{i}/{len(observations)}] {obs.target}"
                     try:
                         last = ""
+                        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+                        tick = 0
                         async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
-                            if ev.phase == "building" and ev.frames_total:
+                            if ev.phase == "building" and ev.detail != "ended":
+                                tick += 1
                                 console.print(
-                                    f"  {label}: building "
-                                    f"{ev.frames_done}/{ev.frames_total} frames"
-                                    + (f" ({ev.detail})" if ev.detail else ""),
+                                    f"  {label}: {spin[tick % len(spin)]} building "
+                                    f"{_build_status(ev)}",
                                     end="\r",
+                                    highlight=False,
                                 )
-                            elif ev.phase != last:
+                            elif ev.phase != last or ev.detail:
+                                # newline to finish any in-place building line
                                 console.print(
                                     f"  {label}: {ev.phase}"
                                     + (f" ({ev.detail})" if ev.detail else "")
