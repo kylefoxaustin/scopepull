@@ -310,3 +310,42 @@ stale job -> pump actively re-polling -> escalating warm-up -> retry (up to
 ~8-10). This is the core of transfer.py, not optional polish. Detection: reject
 `len<20000 and data[:4]==b"PK\x05\x06"`, and reject zips with zero non-manifest
 entries, then retry.
+
+## ✅ CORRECTION + COMPLETE PICTURE — deep-sky frames ARE raw Bayer (2026-09-02)
+
+An earlier note here concluded the delivered frames are "half-res, debayered
+mono, spec premise wrong." That was based ONLY on a PlanetEV (Jupiter)
+observation and is WRONG for deep-sky. Corrected by a real EnhancedVision pull
+(M101, measured):
+
+- PlanetEV (Jupiter) StackInput: 2x2 phase spread 0.2% -> genuinely debayered
+  mono. Planetary mode pre-processes. Special case.
+- EnhancedVision (M101) StackInput: **2x2 phase spread 22.8% -> RAW GBRG BAYER
+  MOSAIC.** 16-bit, 1452x1094, values to 65520. This is the real science data,
+  and the spec's original raw-Bayer/debayer-with-Siril premise HOLDS for the
+  deep-sky targets that matter.
+
+Delivered resolution is 1452x1094 (half the catalog's stated 2904x2192 on both
+axes) but genuinely raw Bayer — suitable for dark-subtract -> debayer -> stack.
+Cause of the halving not established; does not block the pipeline.
+
+Each EnhancedVision observation zip contains a FULL CALIBRATION SET:
+- N x `<ts>_StackInput.tiff`  — raw GBRG Bayer light frames (16-bit)
+- 1 x `<ts>_DarkframeMean.tiff` — master dark, same geometry (Bayer; low phase
+  spread only because a dark carries no color signal)
+- 1 x `<ts>_StackSum.tiff` — the scope's OWN stacked+debayered result
+  (1452x1088, mono, full 16-bit range) — the reference to diff against
+- `preview.jpg` — quick-look
+- `manifest.json` — full per-observation metadata
+
+Ingest plan (settled): unpack zip; StackInput -> per-frame FITS (uint16, tag
+BAYER_GBRG, headers expo/gain/ra/dec/timestamps from manifest); keep Dark as a
+calibration FITS; keep StackSum + preview as reference. Siril hook:
+dark-subtract -> debayer GBRG -> register -> stack -> user's own stack.fit +
+preview.png, for comparison against the scope's StackSum. "Deep Dark ate my
+nebula?" is answered by that diff.
+
+Empty-export retry (from the same run) VALIDATED LIVE: M101 attempts 1-3
+returned the instant empty zip; attempt 4 (18s warm-up) returned 15.3 MB / 5
+frames. The escalating warm-up + cancel + re-poll loop is confirmed necessary
+and sufficient.
