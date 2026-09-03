@@ -265,3 +265,31 @@ Direction if TIFF works: pull TIFF (lossless), convert to FITS locally during
 ingest (astropy), stamping headers from manifest.json + catalog fields
 (ra/dec/expo/gain/obs timestamps). "FITS on disk" stays the deliverable; the
 scope just can't be the thing that produces it.
+
+## FORMAT DECISION — TIFF (2026-09-02, second live run)
+
+Same 2-frame observation, back-to-back verdicts across two runs:
+
+| format | run 1 (2026-09-01) | run 2 (2026-09-02) |
+|---|---|---|
+| FITS | manifest-only ✗ | manifest-only ✗ |
+| TIFF | (not tested)     | **HAS FRAMES ✓** (2.6 MB, .tiff) |
+| PNG  | HAS FRAMES ✓     | **manifest-only ✗** |
+
+Two conclusions:
+1. **TIFF is the pull format.** Lossless, carries the full 12-bit sensor data,
+   and worked. FITS is broken on fw 4.2; PNG is unreliable.
+2. **Any format can intermittently return an empty (manifest-only) zip** — PNG
+   flipped from working to empty between runs on the SAME observation. Cause is
+   almost certainly scope-side load / near-full disk (20 MB free). This is why
+   zip-has-real-frames validation + observation-granularity retry are
+   load-bearing, not optional. A downloader that trusts HTTP 200 ships empties.
+
+Pipeline: pull TIFF → validate frames → during ingest, debayer + wrap to
+12-bit FITS locally (astropy), headers from manifest.json:
+`type=BAYER_GBRG`, `depth=12`, `expo` (µs), `gain`, `ra`/`dec`, `resx`/`resy`,
+`obs_start/end`, per-frame timestamp from the filename. "FITS on disk" survives
+as the deliverable; the scope just isn't the thing that makes it.
+
+OPEN: confirm the scope's TIFF bit depth (expect 16-bit container holding
+12-bit data). Drives whether we store as-is or repack to 12/16-bit FITS.

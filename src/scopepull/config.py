@@ -38,7 +38,9 @@ def default_archive_root() -> Path:
 class Config:
     scope_ip: str = DEFAULT_SCOPE_IP
     archive_root: Path = field(default_factory=default_archive_root)
-    format: str = "fits"
+    # FITS export is broken on Odyssey fw 4.2 and PNG is flaky; TIFF is lossless
+    # and reliable, converted to FITS locally during ingest. See docs/API.md.
+    format: str = "tiff"
 
     @property
     def base_url(self) -> str:

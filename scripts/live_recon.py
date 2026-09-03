@@ -187,7 +187,7 @@ async def main(ip: str) -> None:
                 log(f"  VERDICT [{fmt}]: NOT A ZIP ✗ ({dest.stat().st_size} bytes)")
 
         await send_cancel(http)
-    (OUT / "capture.log").write_text("\n".join(LOG, encoding="utf-8") + "\n")
+    (OUT / "capture.log").write_text("\n".join(LOG) + "\n", encoding="utf-8")
     log(f"recon complete -> {OUT}/")
 
 
