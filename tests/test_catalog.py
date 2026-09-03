@@ -55,3 +55,20 @@ def test_dir_name_stable():
     o = Observation.from_raw({"vpath": "obs/x/1", "name": "M 31", "obs_attr": {"tag_sc": "M 31"}})
     assert o.dir_name == f"m-31__{o.id_short}"
     assert len(o.id_short) == 8
+
+
+def test_parse_real_odyssey_fw42_fixture():
+    """Recorded from Kyle's Odyssey Pro (fw 4.2, 2026-09-01); sn/GPS scrubbed."""
+    body = (FIXTURES / "observations_list_odyssey_fw42.json").read_text()
+    obs = parse_listing(body)
+    assert len(obs) == 15
+    m51 = obs[0]
+    # fw 4.2 has no obs_attr.tag_sc — target must come from nameTarget
+    assert m51.target == "M51 - Whirlpool Galaxy"
+    assert m51.target_slug == "m51-whirlpool-galaxy"
+    assert m51.frame_count == 1796
+    assert m51.raw["type"] == "BAYER_GBRG"
+    assert m51.raw["depth"] == 12
+    jupiter = next(o for o in obs if o.raw["pmode"] == "PlanetEV")
+    assert jupiter.target == "Jupiter"
+    assert jupiter.frame_count == 2

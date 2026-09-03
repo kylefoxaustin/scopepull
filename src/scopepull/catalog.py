@@ -85,13 +85,15 @@ class Observation:
                 started_at = None
 
         obs_attr = obj.get("obs_attr") or {}
+        # Odyssey fw 4.2 puts the display name in nameTarget; eVscope-era
+        # firmware used obs_attr.tag_sc. Fall back through both, then name.
         tag = obs_attr.get("tag_sc") if isinstance(obs_attr, dict) else None
         name = str(obj.get("name") or "")
         nb = obj.get("nb_frames")
         return cls(
             vpath=str(obj.get("vpath") or ""),
             name=name,
-            target=str(tag or name or "untargeted"),
+            target=str(obj.get("nameTarget") or tag or name or "untargeted"),
             purpose=str(obj.get("purpose") or ""),
             pmode=str(obj.get("pmode") or ""),
             started_at=started_at,

@@ -32,7 +32,10 @@ class NetStatus:
                 f"Connected to {joined!r}, not a scope network — join the "
                 "Odyssey-xxxx / UNI-xxxx / eVscope-xxxx Wi-Fi and retry."
             )
-        return "No Wi-Fi connection detected — join the scope's Odyssey-xxxx / UNI-xxxx / eVscope-xxxx network."
+        return (
+            "No Wi-Fi connection detected — join the scope's Odyssey-xxxx / "
+            "UNI-xxxx / eVscope-xxxx network."
+        )
 
 
 async def tcp_reachable(host: str, port: int = 80, timeout: float = 3.0) -> bool:
