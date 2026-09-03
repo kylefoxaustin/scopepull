@@ -349,3 +349,45 @@ Empty-export retry (from the same run) VALIDATED LIVE: M101 attempts 1-3
 returned the instant empty zip; attempt 4 (18s warm-up) returned 15.3 MB / 5
 frames. The escalating warm-up + cancel + re-poll loop is confirmed necessary
 and sufficient.
+
+## ✅ THE EXPORT PROTOCOL — cracked from HAR captures (2026-09-03)
+
+Two browser HAR captures (one 19-min large build, one 6-frame success) reveal
+the actual export lifecycle over GET /api/event. Our whole retry approach was
+wrong; this is the real contract.
+
+The scope builds the zip frame-by-frame on the server and reports it over the
+event long-poll:
+
+    {"cmd":"download","status":"started","progress":1,"nb_frames":6}
+    {"cmd":"download","status":"started","progress":2,"nb_frames":6}
+    ... progress climbs 1 -> nb_frames, ~1 frame/sec ...
+    {"cmd":"download","status":"ended","progress":0,"nb_frames":0}   <-- DONE
+
+- **Completion signal: `status == "ended"`** (progress/nb_frames reset to 0).
+  Confirmed in two independent captures.
+- **Build time scales with frame count**: ~1 frame/sec. A 1082-frame export ran
+  19 minutes and still wasn't done. Big observations take 15-30 min server-side.
+- The browser triggers the build once, then just **polls patiently until
+  `ended`** — it NEVER cancels mid-build.
+
+### Our three bugs (all now explained and fixed)
+1. Gave up in ~3 min; real builds need 15-30 min.
+2. Sent `cancelDownload` before every retry — ABORTING the in-progress build.
+   (M101 6-frame only worked because it rebuilt inside one warm-up window.)
+3. Fired the zip GET immediately instead of waiting for `status=="ended"`.
+   The instant ~10KB empty zip = "build not finished."
+
+### Correct algorithm (implemented in transfer.pull v2)
+1. `cancelDownload` ONCE to clear any stale prior job.
+2. Trigger the build (issue the zip GET; returns the empty zip immediately for
+   a large export — that's fine, the build has started server-side).
+3. Keep ONE event pump polling; watch for `status=="started"` (build underway),
+   report `progress/nb_frames`, then wait for `status=="ended"`. NEVER cancel.
+   Timeout scales with nb_frames (~nb_frames*3s, floor minutes, generous cap).
+4. On `ended`, GET the zip again -> now it streams the real archive.
+5. Validate frames, ingest. Cancel only on genuine abort/failure.
+
+App bundle: /assets/ui-DelGOngg.js (Vue). Event poller is fn `N` (setTimeout
+recursion); download initiated by `kr`/`So`. Fetch it to confirm trigger + the
+exact ended handling if any edge case appears.

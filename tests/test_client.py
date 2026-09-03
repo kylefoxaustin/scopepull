@@ -54,10 +54,12 @@ async def test_pump_ready_means_second_cycle(client):
     assert not pump.alive  # cancelled on exit
 
 
-async def test_cancel_download_clears_stuck_job(client, scope_state):
-    scope_state["stuck_job"] = True
+async def test_cancel_download_resets_build(client, scope_state):
+    scope_state["build"] = "building"
+    scope_state["progress"] = 2
     await client.cancel_download()
-    assert scope_state["stuck_job"] is False
+    assert scope_state["build"] == "idle"
+    assert scope_state["progress"] == 0
     assert scope_state["cancel_count"] == 1
 
 
@@ -73,18 +75,18 @@ async def test_cancel_download_swallows_transport_errors():
 
 
 async def test_download_progress_events(client, scope_state):
-    scope_state["events"] = [
-        {"cmd": "download", "status": "running", "progress": 42, "nb_frames": 100},
-    ]
+    """The pump captures 'started' progress from an in-flight build."""
+    import asyncio
+
+    scope_state["build_frames"] = 5
     async with client.event_pump() as pump:
         await pump.wait_ready(timeout=5)
-        # give the pump a few cycles to swallow the queued event
-        import asyncio
-
-        for _ in range(50):
-            if pump.progress.frames_done:
+        # Trigger a build via a zip GET (returns the empty zip, starts building).
+        await client._http.get("/api/observations/zip/tiff/0x0/prod/obs-0001")
+        for _ in range(200):
+            if pump.progress.frames_total == 5 and pump.progress.frames_done > 0:
                 break
             await asyncio.sleep(0.02)
-    assert pump.progress.frames_done == 42
-    assert pump.progress.frames_total == 100
-    assert pump.progress.status == "running"
+    assert pump.progress.frames_total == 5
+    assert pump.progress.frames_done > 0
+    assert pump.progress.status in ("started", "ended")

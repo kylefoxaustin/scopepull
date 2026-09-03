@@ -80,6 +80,8 @@ class EventPump:
         self._task: asyncio.Task[None] | None = None
         self._first_response = asyncio.Event()
         self._second_cycle = asyncio.Event()
+        self._started = asyncio.Event()  # saw a download "started" event
+        self._ended = asyncio.Event()  # saw a download "ended" event AFTER a start
         self.progress = DownloadProgress()
         self.dead: BaseException | None = None
 
@@ -113,6 +115,30 @@ class EventPump:
             # zip attempt itself will 502 if the backend truly hasn't seen us.
             log.warning("event pump not confirmed ready after %.0fs; proceeding", timeout)
         await asyncio.sleep(self._settle)
+
+    async def wait_for_started(self, timeout: float) -> bool:
+        """Wait until the scope reports the export build has begun."""
+        try:
+            await asyncio.wait_for(self._started.wait(), timeout)
+            return True
+        except TimeoutError:
+            if not self.alive:
+                raise PumpDead("event pump died waiting for build start") from self.dead
+            return False
+
+    async def wait_for_ended(self, timeout: float) -> bool:
+        """Wait until the scope reports the export build is complete ("ended").
+
+        Returns True on "ended", False on timeout. Raises PumpDead if the pump
+        died. Does NOT cancel anything — the build must run uninterrupted.
+        """
+        try:
+            await asyncio.wait_for(self._ended.wait(), timeout)
+            return True
+        except TimeoutError:
+            if not self.alive:
+                raise PumpDead("event pump died waiting for build end") from self.dead
+            return False
 
     async def _loop(self) -> None:
         first = True
@@ -157,9 +183,18 @@ class EventPump:
             return
         cmd = data.get("cmd", "")
         if cmd == "download":
-            self.progress.status = str(data.get("status", ""))
-            self.progress.frames_done = _as_int(data.get("progress"))
-            self.progress.frames_total = _as_int(data.get("nb_frames"))
+            status = str(data.get("status", ""))
+            self.progress.status = status
+            if status == "started":
+                self.progress.frames_done = _as_int(data.get("progress"))
+                self.progress.frames_total = _as_int(data.get("nb_frames"))
+                self._started.set()
+            elif status == "ended":
+                # "ended" is the build-complete signal, but only meaningful
+                # after we've seen a matching "started" — otherwise it is the
+                # idle/stale state left by a previous (or no) download.
+                if self._started.is_set():
+                    self._ended.set()
         elif cmd == "obslist":
             pass  # catalog changed; harmless during a pull
         else:

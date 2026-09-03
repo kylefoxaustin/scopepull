@@ -1,13 +1,12 @@
 """FastAPI fake of the Odyssey DDD backend, faithful to docs/API.md.
 
-Reproduces the behaviors scopepull's reliability logic depends on:
-- the long-poll GATE: zip needs a fresh /api/event poll
-- the WARM-UP: the first N zip requests for a job return an instant empty zip
-  (PK\\x05\\x06 + padding), like an EnhancedVision export that isn't ready yet;
-  attempt N+1 returns the real calibration-set zip
-- NaN tokens, DDD-disabled, stuck-job, manifest-only, flaky (drop at N bytes)
-- real zip layout: StackInput (raw Bayer lights) + DarkframeMean + StackSum +
-  preview.jpg + manifest.json
+Models the real export protocol cracked from HAR captures: a zip GET triggers a
+server-side build that advances one frame per /api/event poll, reporting
+status "started" with climbing progress, then a terminal "ended"; only after
+"ended" does a zip GET return the real calibration-set archive.
+
+Also reproduces: the long-poll gate, NaN tokens, DDD-disabled, manifest-only,
+and a flaky short-read.
 """
 
 from __future__ import annotations
@@ -27,8 +26,8 @@ POLL_FRESHNESS = 5.0
 
 SPA_HTML = "<html><head><title>Unistellar</title></head><body>vue app</body></html>"
 
-# An empty export: End-Of-Central-Directory record + zero padding to 10240 bytes,
-# exactly what the real scope returns for a not-ready/failed export.
+# A not-ready export: End-Of-Central-Directory record + zero padding to 10240 B,
+# exactly what the real scope returns while an export is still building.
 EMPTY_ZIP = b"PK\x05\x06" + b"\x00" * (10240 - 4)
 
 OBSERVATIONS = [
@@ -76,14 +75,12 @@ OBSERVATIONS = [
 
 
 def _bayer_frame(seed: int, w: int = 160, h: int = 120) -> bytes:
-    """A tiny 16-bit TIFF with a real GBRG-ish Bayer phase difference, LZW."""
     rng = np.random.default_rng(seed)
     a = rng.integers(2000, 3000, size=(h, w), dtype=np.uint16)
-    # Impose a per-phase offset so the 2x2 phase spread reads as a Bayer mosaic.
-    a[0::2, 0::2] += 8000  # G
-    a[0::2, 1::2] += 12000  # B
-    a[1::2, 0::2] += 4000  # R
-    a[1::2, 1::2] += 8000  # G
+    a[0::2, 0::2] += 8000
+    a[0::2, 1::2] += 12000
+    a[1::2, 0::2] += 4000
+    a[1::2, 1::2] += 8000
     buf = io.BytesIO()
     tifffile.imwrite(buf, a, compression="lzw")
     return buf.getvalue()
@@ -98,7 +95,6 @@ def _mono_frame(seed: int, w: int = 160, h: int = 120) -> bytes:
 
 
 def make_calibration_zip(obs: dict, *, manifest_only: bool = False) -> bytes:
-    """A real-shape EnhancedVision export: lights + dark + stacksum + preview."""
     name = obs["name"]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -119,13 +115,17 @@ def create_app() -> FastAPI:
     state = {
         "last_poll": 0.0,
         "ddd_enabled": True,
-        "stuck_job": False,
         "manifest_only": False,
         "flaky_after": 0,
-        "warmup_empties": 0,  # first N zip GETs (job lifetime) return empty, then real
-        "events": [],
         "cancel_count": 0,
-        "warmup_seen": 0,  # total real zip GETs; NOT reset by cancel (readies over time)
+        # Build state machine: a zip GET triggers a build that advances one
+        # frame per event poll; "ended" fires when complete; only then does a
+        # zip GET return the real archive.
+        "build": "idle",  # idle | building | ready
+        "build_vpath": None,
+        "progress": 0,
+        "build_frames": 3,  # frames this export needs (small for fast tests)
+        "emitted_ended": False,
     }
     app.state.scope = state
 
@@ -143,21 +143,33 @@ def create_app() -> FastAPI:
     @app.get("/api/event")
     async def event_poll() -> Response:
         state["last_poll"] = time.monotonic()
-        if state["events"]:
-            return Response(
-                content=json.dumps(state["events"].pop(0)), media_type="application/json"
-            )
-        # Hold briefly like the real long-poll so the pump paces itself and
-        # doesn't saturate the shared ASGI transport during a concurrent stream.
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.02)  # brief long-poll hold; paces the pump
+        if state["build"] == "building":
+            state["progress"] += 1
+            if state["progress"] >= state["build_frames"]:
+                state["build"] = "ready"
+            body = {
+                "cmd": "download",
+                "status": "started",
+                "progress": min(state["progress"], state["build_frames"]),
+                "nb_frames": state["build_frames"],
+            }
+            return Response(content=json.dumps(body), media_type="application/json")
+        if state["build"] == "ready" and not state["emitted_ended"]:
+            state["emitted_ended"] = True
+            body = {"cmd": "download", "status": "ended", "progress": 0, "nb_frames": 0}
+            return Response(content=json.dumps(body), media_type="application/json")
         return Response(content="", media_type="text/plain")
 
     @app.post("/api/event")
     async def event_cmd(request: Request) -> dict:
         data = await request.json()
         if data.get("cmd") == "cancelDownload":
-            state["stuck_job"] = False
             state["cancel_count"] += 1
+            state["build"] = "idle"
+            state["build_vpath"] = None
+            state["progress"] = 0
+            state["emitted_ended"] = False
         return {"ok": True}
 
     @app.get("/api/observations/zip/{fmt}/{res}/{vpath:path}")
@@ -166,16 +178,19 @@ def create_app() -> FastAPI:
             return HTMLResponse(SPA_HTML)
         if time.monotonic() - state["last_poll"] > POLL_FRESHNESS:
             return Response(status_code=502, content="Bad Gateway")
-        if state["stuck_job"]:
-            return Response(status_code=502, content="Bad Gateway")
         obs = next((o for o in OBSERVATIONS if o["vpath"] == vpath), None)
         if obs is None:
             return Response(status_code=404)
 
-        # Warm-up: first N zip GETs over the job's life return the empty zip, then
-        # the real export — models "export readies over time despite cancels".
-        state["warmup_seen"] += 1
-        if state["warmup_seen"] <= state["warmup_empties"]:
+        if state["build"] == "ready" and state["build_vpath"] == vpath:
+            pass  # fall through: return the real archive
+        else:
+            # Trigger (or continue) the build; return the instant empty zip.
+            if state["build"] != "building" or state["build_vpath"] != vpath:
+                state["build"] = "building"
+                state["build_vpath"] = vpath
+                state["progress"] = 0
+                state["emitted_ended"] = False
             return Response(content=EMPTY_ZIP, media_type="application/zip")
 
         blob = make_calibration_zip(obs, manifest_only=state["manifest_only"])
@@ -184,12 +199,12 @@ def create_app() -> FastAPI:
             cut = state["flaky_after"]
 
             async def dribble():
-                # Send fewer bytes than Content-Length promises, then stop —
-                # httpx sees a RemoteProtocolError (peer closed mid-body).
-                yield blob[:cut]
+                yield blob[:cut]  # short read vs Content-Length -> client error
 
             return StreamingResponse(
-                dribble(), media_type="application/zip", headers={"Content-Length": str(len(blob))}
+                dribble(),
+                media_type="application/zip",
+                headers={"Content-Length": str(len(blob))},
             )
 
         return Response(content=blob, media_type="application/zip")

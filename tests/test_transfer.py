@@ -1,4 +1,4 @@
-"""transfer.pull against the mock: warm-up retry, empty rejection, flaky drops."""
+"""transfer.pull against the mock's build-then-download state machine."""
 
 from __future__ import annotations
 
@@ -8,64 +8,57 @@ import pytest
 from scopepull.catalog import Observation
 from scopepull.client import ScopeClient
 from scopepull.transfer import TransferError, pull, zip_has_frames
-from tests.mock_scope import EMPTY_ZIP, make_calibration_zip
+from tests.mock_scope import EMPTY_ZIP, OBSERVATIONS, make_calibration_zip
 
 
 def _obs() -> Observation:
-    return Observation.from_raw(
-        {
-            "vpath": "prod/obs-0001",
-            "name": "20260201T050025_166",
-            "nameTarget": "M101 - Pinwheel Galaxy",
-            "nb_frames": 6,
-            "obs_start": 1787184000000,
-            "type": "BAYER_GBRG",
-        }
-    )
+    return Observation.from_raw(dict(OBSERVATIONS[0]))
 
 
-async def _client(app):
+def _client(app):
     return ScopeClient("http://192.168.100.1", settle=0.0, transport=httpx.ASGITransport(app=app))
 
 
 async def _run(client, obs, dest, **kw):
     events = []
-    async for ev in pull(
-        client, obs, dest, max_attempts=kw.get("max_attempts", 10), warmup=lambda a: 0.0
-    ):  # no real sleeps in tests
+    async for ev in pull(client, obs, dest, build_timeout=kw.get("build_timeout", 20)):
         events.append(ev)
     return events
 
 
-async def test_pull_succeeds_first_try(mock_app, scope_state, tmp_path):
-    scope_state["warmup_empties"] = 0
-    client = await _client(mock_app)
+async def test_pull_build_then_download(mock_app, scope_state, tmp_path):
+    """Full protocol: trigger -> building (started) -> ended -> download."""
+    client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     events = await _run(client, _obs(), dest)
+    await client.aclose()
+    assert dest.exists() and zip_has_frames(dest)
+    phases = [e.phase for e in events]
+    assert "trigger" in phases
+    assert "building" in phases
+    assert "downloading" in phases
+    assert events[-1].phase == "done"
+    # We must NOT have cancelled during the build — exactly one clear at start.
+    assert scope_state["cancel_count"] == 1
+
+
+async def test_pull_waits_for_ended_not_just_first_empty(mock_app, scope_state, tmp_path):
+    # Make the build take several polls; the pull must keep waiting, not give up.
+    scope_state["build_frames"] = 8
+    client = _client(mock_app)
+    dest = tmp_path / "obs.zip"
+    events = await _run(client, _obs(), dest, build_timeout=30)
     await client.aclose()
     assert dest.exists() and zip_has_frames(dest)
     assert events[-1].phase == "done"
 
 
-async def test_pull_retries_through_warmup_empties(mock_app, scope_state, tmp_path):
-    # First 3 attempts return the instant empty zip; 4th returns real frames.
-    scope_state["warmup_empties"] = 3
-    client = await _client(mock_app)
-    dest = tmp_path / "obs.zip"
-    events = await _run(client, _obs(), dest)
-    await client.aclose()
-    assert dest.exists() and zip_has_frames(dest)
-    empties = [e for e in events if e.phase == "empty"]
-    assert len(empties) == 3
-    assert events[-1].phase == "done" and events[-1].attempt == 4
-
-
-async def test_pull_gives_up_after_max_attempts(mock_app, scope_state, tmp_path):
-    scope_state["warmup_empties"] = 99  # never succeeds
-    client = await _client(mock_app)
+async def test_pull_times_out_if_build_never_ends(mock_app, scope_state, tmp_path):
+    scope_state["build_frames"] = 10_000  # will never finish in the budget
+    client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     with pytest.raises(TransferError):
-        await _run(client, _obs(), dest, max_attempts=3)
+        await _run(client, _obs(), dest, build_timeout=1)
     await client.aclose()
     assert not dest.exists()
     assert not dest.with_suffix(".zip.partial").exists()
@@ -73,32 +66,23 @@ async def test_pull_gives_up_after_max_attempts(mock_app, scope_state, tmp_path)
 
 async def test_pull_rejects_manifest_only(mock_app, scope_state, tmp_path):
     scope_state["manifest_only"] = True
-    client = await _client(mock_app)
+    client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     with pytest.raises(TransferError):
-        await _run(client, _obs(), dest, max_attempts=2)
+        await _run(client, _obs(), dest, build_timeout=20)
     await client.aclose()
     assert not dest.exists()
 
 
-async def test_pull_recovers_from_partial_transfer(mock_app, scope_state, tmp_path):
-    # First job truncates mid-stream (short read); heal it so the retry completes.
+async def test_pull_fails_on_dropped_download(mock_app, scope_state, tmp_path):
+    # The post-"ended" download drops mid-stream (short read).
     scope_state["flaky_after"] = 5000
-    client = await _client(mock_app)
+    client = _client(mock_app)
     dest = tmp_path / "obs.zip"
-    events = []
-    healed = False
-    async for ev in pull(client, _obs(), dest, max_attempts=5, warmup=lambda a: 0.0):
-        events.append(ev)
-        # After attempt 1 fails (short body -> dropped or empty), heal the link.
-        if not healed and ev.attempt == 1 and ev.phase in ("dropped", "empty"):
-            scope_state["flaky_after"] = 0
-            healed = True
+    with pytest.raises(TransferError):
+        await _run(client, _obs(), dest, build_timeout=20)
     await client.aclose()
-    # Attempt 1 must have failed, and a later attempt must have completed cleanly.
-    assert any(e.attempt == 1 and e.phase in ("dropped", "empty") for e in events)
-    assert events[-1].phase == "done" and events[-1].attempt >= 2
-    assert dest.exists() and zip_has_frames(dest)
+    assert not dest.exists()
 
 
 def test_zip_has_frames_rejects_empty(tmp_path):
@@ -108,8 +92,6 @@ def test_zip_has_frames_rejects_empty(tmp_path):
 
 
 def test_zip_has_frames_accepts_real(tmp_path):
-    from tests.mock_scope import OBSERVATIONS
-
     p = tmp_path / "r.zip"
     p.write_bytes(make_calibration_zip(OBSERVATIONS[0]))
     assert zip_has_frames(p)

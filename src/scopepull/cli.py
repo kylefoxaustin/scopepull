@@ -286,12 +286,19 @@ def _pull(
                     try:
                         last = ""
                         async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
-                            if ev.phase != last:
+                            if ev.phase == "building" and ev.frames_total:
+                                console.print(
+                                    f"  {label}: building "
+                                    f"{ev.frames_done}/{ev.frames_total} frames"
+                                    + (f" ({ev.detail})" if ev.detail else ""),
+                                    end="\r",
+                                )
+                            elif ev.phase != last:
                                 console.print(
                                     f"  {label}: {ev.phase}"
                                     + (f" ({ev.detail})" if ev.detail else "")
                                 )
-                                last = ev.phase
+                            last = ev.phase
                         res = ingest_zip(zip_path, obs, cfg, m)
                         zip_path.unlink(missing_ok=True)
                         console.print(
