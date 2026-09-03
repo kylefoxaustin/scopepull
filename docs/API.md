@@ -293,3 +293,20 @@ as the deliverable; the scope just isn't the thing that makes it.
 
 OPEN: confirm the scope's TIFF bit depth (expect 16-bit container holding
 12-bit data). Drives whether we store as-is or repack to 12/16-bit FITS.
+
+## Empty-export signature + retry requirement (2026-09-02)
+
+MEASURED: a failed/not-ready export returns an **instant (~0.0s) valid-but-empty
+zip**: bytes = `PK\x05\x06` (End Of Central Directory, zero entries) + zero
+padding to exactly **10240 bytes**. Two empty variants seen: this fully-empty
+zip, and a "manifest-only" zip (folder + manifest.json, no frames). Both must
+be treated as FAILURE.
+
+MEASURED: freeing scope disk (20MB -> plenty) did NOT fix EnhancedVision empty
+exports — so it is NOT primarily a disk-staging problem. The Jupiter (PlanetEV,
+2-frame, cropped) export succeeds on the first attempt; EnhancedVision exports
+return the instant-empty zip and require the prior-art retry strategy: cancel
+stale job -> pump actively re-polling -> escalating warm-up -> retry (up to
+~8-10). This is the core of transfer.py, not optional polish. Detection: reject
+`len<20000 and data[:4]==b"PK\x05\x06"`, and reject zips with zero non-manifest
+entries, then retry.

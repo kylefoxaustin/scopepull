@@ -102,23 +102,47 @@ async def main(ip: str, needle: str, fmt: str) -> None:
               f"resx={match.get('resx')} resy={match.get('resy')} depth={match.get('depth')}")
         print(f"Pulling {fmt.upper()} of {vpath} ...")
 
-        await send_cancel(http)
-        await asyncio.sleep(1)
-        stop = asyncio.Event()
-        task = asyncio.create_task(pump_loop(http, stop))
-        await asyncio.sleep(8)
+        # Retry loop with escalating warm-up — EnhancedVision exports return an
+        # instant empty zip (PK\x05\x06 + padding) until the backend has prepared
+        # the job. Prior art needed up to ~10 tries with growing settle. We cancel
+        # any stale job before each attempt and keep the event pump actively polling.
+        url = f"/api/observations/zip/{fmt}/0x0/{quote(vpath, safe='/')}"
+        MAX_ATTEMPTS = 8
+        data = b""
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            await send_cancel(http)
+            await asyncio.sleep(1)
+            stop = asyncio.Event()
+            task = asyncio.create_task(pump_loop(http, stop))
+            settle = 6 + attempt * 3  # 9,12,15,... seconds — grows each retry
+            print(f"  attempt {attempt}/{MAX_ATTEMPTS}: pump warming {settle}s ...", flush=True)
+            await asyncio.sleep(settle)
 
-        t0 = time.time()
-        buf = io.BytesIO()
-        async with http.stream("GET", f"/api/observations/zip/{fmt}/0x0/{quote(vpath, safe='/')}") as resp:
-            print(f"  HTTP {resp.status_code} ct={resp.headers.get('content-type')}")
-            async for chunk in resp.aiter_bytes(256 * 1024):
-                buf.write(chunk)
-        stop.set()
-        task.cancel()
+            t0 = time.time()
+            buf = io.BytesIO()
+            try:
+                async with http.stream("GET", url) as resp:
+                    ct = resp.headers.get("content-type", "")
+                    async for chunk in resp.aiter_bytes(256 * 1024):
+                        buf.write(chunk)
+            except httpx.TransportError as e:
+                print(f"    dropped: {type(e).__name__}")
+            finally:
+                stop.set()
+                task.cancel()
+
+            data = buf.getvalue()
+            dt = time.time() - t0
+            # Empty export = the ~10KB PK\x05\x06+padding zip. Detect and retry.
+            is_empty = len(data) < 20000 and data[:4] == b"PK\x05\x06"
+            print(f"    HTTP {resp.status_code} {ct} {len(data)} bytes in {dt:.1f}s"
+                  f"{' [EMPTY]' if is_empty else ''}")
+            if data and not is_empty:
+                break
+            if attempt < MAX_ATTEMPTS:
+                print("    empty — retrying with longer warm-up")
         await send_cancel(http)
 
-        data = buf.getvalue()
         safe = re.sub(r"[^A-Za-z0-9]+", "_", target).strip("_") or "obs"
         dest = OUT / f"{safe}_{fmt}.zip"
         dest.write_bytes(data)
