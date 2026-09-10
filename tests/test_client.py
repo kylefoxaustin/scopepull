@@ -92,3 +92,26 @@ async def test_download_progress_events(client, scope_state):
         await task
     assert pump.progress.frames_total == 5
     assert pump.progress.frames_done > 0
+
+
+def test_keepalive_socket_options_present():
+    """Real ScopeClient enables TCP keepalive; SO_KEEPALIVE is always included."""
+    import socket
+
+    from scopepull.client import _keepalive_socket_options
+
+    opts = _keepalive_socket_options()
+    assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in opts
+    # Every entry is a (level, optname, value) int triple setsockopt accepts.
+    assert all(len(o) == 3 and all(isinstance(x, int) for x in o) for o in opts)
+    # On Linux the interval knobs must be present (they carry the real behavior).
+    if hasattr(socket, "TCP_KEEPIDLE"):
+        assert any(o[1] == socket.TCP_KEEPIDLE for o in opts)
+
+
+def test_real_client_builds_with_keepalive_transport():
+    """Constructing ScopeClient without an injected transport works (keepalive path)."""
+    from scopepull.client import ScopeClient
+
+    c = ScopeClient("http://192.168.100.1")
+    assert c._http is not None

@@ -432,3 +432,19 @@ End-to-end result (Skippy dual-homed, ethernet internet + wlo1 on the scope):
 `scopepull pull` pulled M101 -> 15 MB -> ingested 2 raw GBRG Bayer frames +
 FITS (BAYERPAT=GBRG, EXPTIME=4s, GAIN=321, RA/DEC, 22.7% Bayer phase spread
 confirming intact mosaic). The tool works.
+
+## Long-idle-build connection reset -> TCP keepalive (2026-09-10)
+
+Observed on a Windows laptop pulling M81 (714 frames) over a USB Wi-Fi dongle:
+the single held zip GET fails with ReadError DURING the build, before any bytes
+stream. Cause: a large export streams no body bytes for many minutes while the
+scope builds the zip (M81 ~12 min), and the idle TCP socket is reset by the USB
+adapter/stack before the data starts. M82 (~6 min build) survived; M81 did not.
+NOT roaming (the dongle had no other profile to roam to) and NOT the scope
+(Skippy's PCIe Wi-Fi pulled M81 fine).
+
+Fix: ScopeClient now sets SO_KEEPALIVE + TCP_KEEPIDLE=20 / TCP_KEEPINTVL=20 /
+TCP_KEEPCNT=10 on its real transport (guarded per-platform; interval knobs
+applied where the OS exposes them). A tiny keepalive probe every ~20 s keeps
+the idle download socket alive through the whole build. Injected transports
+(tests' ASGITransport) are untouched.

@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import socket
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
@@ -210,6 +211,24 @@ def _as_int(val: Any) -> int:
     return int(val) if isinstance(val, (int, float)) else 0
 
 
+def _keepalive_socket_options() -> list[tuple[int, int, int]]:
+    """TCP keepalive so the download connection survives a long idle build.
+
+    A large export streams NO body bytes for many minutes while the scope
+    builds the zip; without keepalive the idle socket gets reset by the USB
+    Wi-Fi adapter or the scope before the bytes start (observed on M81, ~12 min
+    build). SO_KEEPALIVE is universal; the interval knobs are platform-specific
+    and applied only where the running Python/OS exposes them (Linux always;
+    Windows 10 1709+/py3.7+; macOS uses a different name and is skipped).
+    """
+    opts: list[tuple[int, int, int]] = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+    for name, value in (("TCP_KEEPIDLE", 20), ("TCP_KEEPINTVL", 20), ("TCP_KEEPCNT", 10)):
+        opt = getattr(socket, name, None)
+        if opt is not None:
+            opts.append((socket.IPPROTO_TCP, opt, value))
+    return opts
+
+
 class ScopeClient:
     """Async client for one scope. Owns the httpx client; use as a context manager."""
 
@@ -222,6 +241,14 @@ class ScopeClient:
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._settle = settle
+        # Real connections get TCP keepalive so a long idle build (no bytes for
+        # minutes) doesn't get its socket reset. Injected transports (tests'
+        # ASGITransport) are left as-is.
+        if transport is None:
+            transport = httpx.AsyncHTTPTransport(
+                socket_options=_keepalive_socket_options(),
+                retries=1,
+            )
         self._http = httpx.AsyncClient(
             base_url=self.base_url,
             headers={"User-Agent": USER_AGENT, "Accept": "*/*"},

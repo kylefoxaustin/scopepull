@@ -318,19 +318,23 @@ def _pull(
                         last = ""
                         spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
                         tick = 0
+                        on_progress_line = False
                         async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
                             if ev.phase == "downloading":
                                 tick += 1
-                                console.print(
-                                    f"  {label}: {spin[tick % len(spin)]} {_build_status(ev)}",
-                                    end="\r",
-                                    highlight=False,
-                                )
+                                # ljust pads over any longer previous line so it
+                                # doesn't leave residue (the "donewnloading" bug).
+                                line = f"  {label}: {spin[tick % len(spin)]} {_build_status(ev)}"
+                                console.print(line.ljust(72), end="\r", highlight=False)
+                                on_progress_line = True
                             elif ev.phase != last:
+                                if on_progress_line:
+                                    console.print()  # finalize the in-place line
+                                    on_progress_line = False
                                 console.print(f"  {label}: {ev.phase}")
                             last = ev.phase
-                        # finish the in-place line with a newline
-                        console.print()
+                        if on_progress_line:
+                            console.print()
                         res = ingest_zip(zip_path, obs, cfg, m)
                         zip_path.unlink(missing_ok=True)
                         console.print(
