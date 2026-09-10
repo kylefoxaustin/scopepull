@@ -310,17 +310,20 @@ class ScopeClient:
 
     # -- transfer -------------------------------------------------------------
 
-    def stream_zip(self, url: str) -> Any:
+    def stream_zip(self, url: str, *, read_timeout: float = READ_TIMEOUT) -> Any:
         """Open a streaming GET for a zip export. Use as an async context manager:
 
             async with client.stream_zip(url) as resp:
                 async for chunk in resp.aiter_bytes(...): ...
 
-        The caller must have an event pump active (see event_pump) or the scope
-        will 502 / hang — that is the export gate (docs/API.md).
+        This single held GET both triggers the server-side build and streams the
+        finished archive — the scope emits NO body bytes while it is still
+        building (docs/API.md), so read_timeout must exceed the whole build
+        time (scale it to the frame count). An event pump must be actively
+        polling concurrently or the scope will not stream (the export gate).
         """
         return self._http.stream(
-            "GET", url, timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
+            "GET", url, timeout=httpx.Timeout(read_timeout, connect=CONNECT_TIMEOUT)
         )
 
     # -- events ---------------------------------------------------------------

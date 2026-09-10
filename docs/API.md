@@ -391,3 +391,44 @@ event long-poll:
 App bundle: /assets/ui-DelGOngg.js (Vue). Event poller is fn `N` (setTimeout
 recursion); download initiated by `kr`/`So`. Fetch it to confirm trigger + the
 exact ended handling if any edge case appears.
+
+## ✅✅ PROTOCOL FINALIZED — single held GET (2026-09-09, proven live on hardware)
+
+Read directly from the Vue app's own code (`/assets/index-*.js`) plus live
+probes against Kyle's scope. Supersedes every earlier "trigger then re-GET"
+and "cancel-and-retry" model in this doc.
+
+The app's download function is literally:
+
+    _1 = (fmt, w, h, vpaths) => d1(`/api/observations/zip/${fmt}/${w}x${h}/${vpaths.join("|")}`)
+    d1 = url => { const a = document.createElement("a"); a.href = url;
+                  a.download = "unistellar-observation.zip"; a.click(); }
+
+i.e. a plain anchor-navigation **GET** to the zip URL. Called as
+`_1(format, 0, 0, [vpath, ...])` — so `0x0` (native size) is correct, and
+multiple observations are joined with `|` (we pull one per job).
+
+**That single GET is held open by the scope: it triggers the server-side build
+AND streams the finished archive on the same connection.** No body bytes flow
+while it builds (minutes for big observations); then the whole zip streams.
+The `/api/event` channel reports `status:"started" progress:1..nb_frames` then
+`status:"ended"` purely for the progress bar — you do NOT poll it to decide when
+to download; the GET itself delivers the bytes.
+
+MEASURED live, same 6-frame M101 observation:
+  * GET **without** a preceding cancel  -> builds, streams full 15,267,840 B in 7.4 s ✓
+  * GET **with** a `cancelDownload` just before -> instant 10,240 B empty zip ✗
+
+So the two rules in transfer.py:
+  1. **Never cancelDownload before the GET.** A pre-cancel suppresses the build.
+     Cancel is only for cleaning up AFTER an aborted/failed transfer.
+  2. **A concurrent event poll must be in flight** (the gate) — start the pump,
+     let it issue one poll (~2.5 s), then GET. Don't wait for a poll *response*
+     (an idle poll long-holds ~30 s).
+  3. **read_timeout must exceed the whole build** (no bytes during build) —
+     scaled to frame count.
+
+End-to-end result (Skippy dual-homed, ethernet internet + wlo1 on the scope):
+`scopepull pull` pulled M101 -> 15 MB -> ingested 2 raw GBRG Bayer frames +
+FITS (BAYERPAT=GBRG, EXPTIME=4s, GAIN=321, RA/DEC, 22.7% Bayer phase spread
+confirming intact mosaic). The tool works.

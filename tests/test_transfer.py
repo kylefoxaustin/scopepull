@@ -1,4 +1,4 @@
-"""transfer.pull against the mock's build-then-download state machine."""
+"""transfer.pull against the mock's single-held-GET protocol."""
 
 from __future__ import annotations
 
@@ -21,47 +21,35 @@ def _client(app):
 
 async def _run(client, obs, dest, **kw):
     events = []
-    async for ev in pull(client, obs, dest, build_timeout=kw.get("build_timeout", 20)):
+    async for ev in pull(client, obs, dest, read_timeout=kw.get("read_timeout", 20)):
         events.append(ev)
     return events
 
 
-async def test_pull_build_then_download(mock_app, scope_state, tmp_path):
-    """Full protocol: trigger -> building (started) -> ended -> download."""
+async def test_pull_single_get_downloads_and_ingests(mock_app, scope_state, tmp_path):
     client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     events = await _run(client, _obs(), dest)
     await client.aclose()
     assert dest.exists() and zip_has_frames(dest)
     phases = [e.phase for e in events]
-    assert "trigger" in phases
-    assert "building" in phases
+    assert phases[0] == "starting"
     assert "downloading" in phases
     assert events[-1].phase == "done"
-    # We must NOT have cancelled during the build — exactly one clear at start.
-    assert scope_state["cancel_count"] == 1
+    # No pre-cancel: the browser never cancels before the GET.
+    assert scope_state["cancel_count"] == 0
 
 
-async def test_pull_waits_for_ended_not_just_first_empty(mock_app, scope_state, tmp_path):
-    # Make the build take several polls; the pull must keep waiting, not give up.
-    scope_state["build_frames"] = 8
+async def test_pull_reports_build_progress(mock_app, scope_state, tmp_path):
+    # Longer build window so the event pump surfaces frame progress.
+    scope_state["build_frames"] = 6
+    scope_state["build_seconds"] = 0.5
     client = _client(mock_app)
     dest = tmp_path / "obs.zip"
-    events = await _run(client, _obs(), dest, build_timeout=30)
+    events = await _run(client, _obs(), dest)
     await client.aclose()
     assert dest.exists() and zip_has_frames(dest)
     assert events[-1].phase == "done"
-
-
-async def test_pull_times_out_if_build_never_ends(mock_app, scope_state, tmp_path):
-    scope_state["build_frames"] = 10_000  # will never finish in the budget
-    client = _client(mock_app)
-    dest = tmp_path / "obs.zip"
-    with pytest.raises(TransferError):
-        await _run(client, _obs(), dest, build_timeout=1)
-    await client.aclose()
-    assert not dest.exists()
-    assert not dest.with_suffix(".zip.partial").exists()
 
 
 async def test_pull_rejects_manifest_only(mock_app, scope_state, tmp_path):
@@ -69,18 +57,29 @@ async def test_pull_rejects_manifest_only(mock_app, scope_state, tmp_path):
     client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     with pytest.raises(TransferError):
-        await _run(client, _obs(), dest, build_timeout=20)
+        await _run(client, _obs(), dest)
     await client.aclose()
     assert not dest.exists()
 
 
 async def test_pull_fails_on_dropped_download(mock_app, scope_state, tmp_path):
-    # The post-"ended" download drops mid-stream (short read).
-    scope_state["flaky_after"] = 5000
+    scope_state["flaky_after"] = 5000  # short read mid-stream
     client = _client(mock_app)
     dest = tmp_path / "obs.zip"
     with pytest.raises(TransferError):
-        await _run(client, _obs(), dest, build_timeout=20)
+        await _run(client, _obs(), dest)
+    await client.aclose()
+    assert not dest.exists()
+    assert not dest.with_suffix(".zip.partial").exists()
+
+
+async def test_pull_rejects_empty_after_precancel(mock_app, scope_state, tmp_path):
+    # Simulate a stale suppression (as if a cancel had preceded): GET returns empty.
+    scope_state["suppressed"] = True
+    client = _client(mock_app)
+    dest = tmp_path / "obs.zip"
+    with pytest.raises(TransferError):
+        await _run(client, _obs(), dest)
     await client.aclose()
     assert not dest.exists()
 

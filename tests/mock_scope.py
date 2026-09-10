@@ -118,14 +118,15 @@ def create_app() -> FastAPI:
         "manifest_only": False,
         "flaky_after": 0,
         "cancel_count": 0,
-        # Build state machine: a zip GET triggers a build that advances one
-        # frame per event poll; "ended" fires when complete; only then does a
-        # zip GET return the real archive.
-        "build": "idle",  # idle | building | ready
-        "build_vpath": None,
+        # Single-held-GET model (docs/API.md): a zip GET holds while the server
+        # "builds" (event polls report started 1..N then ended), then streams
+        # the real archive. A pre-cancel suppresses the build (returns empty).
+        "build_frames": 3,  # frames the export needs (small for fast tests)
+        "build_seconds": 0.3,  # simulated build duration before bytes stream
         "progress": 0,
-        "build_frames": 3,  # frames this export needs (small for fast tests)
-        "emitted_ended": False,
+        "building": False,
+        "ended": False,
+        "suppressed": False,  # set by a cancel that arrived before/without a GET
     }
     app.state.scope = state
 
@@ -144,19 +145,17 @@ def create_app() -> FastAPI:
     async def event_poll() -> Response:
         state["last_poll"] = time.monotonic()
         await asyncio.sleep(0.02)  # brief long-poll hold; paces the pump
-        if state["build"] == "building":
-            state["progress"] += 1
-            if state["progress"] >= state["build_frames"]:
-                state["build"] = "ready"
+        if state["building"]:
+            state["progress"] = min(state["progress"] + 1, state["build_frames"])
             body = {
                 "cmd": "download",
                 "status": "started",
-                "progress": min(state["progress"], state["build_frames"]),
+                "progress": state["progress"],
                 "nb_frames": state["build_frames"],
             }
             return Response(content=json.dumps(body), media_type="application/json")
-        if state["build"] == "ready" and not state["emitted_ended"]:
-            state["emitted_ended"] = True
+        if state["ended"]:
+            state["ended"] = False
             body = {"cmd": "download", "status": "ended", "progress": 0, "nb_frames": 0}
             return Response(content=json.dumps(body), media_type="application/json")
         return Response(content="", media_type="text/plain")
@@ -166,10 +165,10 @@ def create_app() -> FastAPI:
         data = await request.json()
         if data.get("cmd") == "cancelDownload":
             state["cancel_count"] += 1
-            state["build"] = "idle"
-            state["build_vpath"] = None
+            state["building"] = False
+            state["ended"] = False
             state["progress"] = 0
-            state["emitted_ended"] = False
+            state["suppressed"] = True  # next GET returns empty (pre-cancel breaks build)
         return {"ok": True}
 
     @app.get("/api/observations/zip/{fmt}/{res}/{vpath:path}")
@@ -182,19 +181,20 @@ def create_app() -> FastAPI:
         if obs is None:
             return Response(status_code=404)
 
-        if state["build"] == "ready" and state["build_vpath"] == vpath:
-            pass  # fall through: return the real archive
-        else:
-            # Trigger (or continue) the build; return the instant empty zip.
-            if state["build"] != "building" or state["build_vpath"] != vpath:
-                state["build"] = "building"
-                state["build_vpath"] = vpath
-                state["progress"] = 0
-                state["emitted_ended"] = False
+        # A cancel arriving before/without a GET suppresses the build: the GET
+        # returns the instant empty zip (matches real hardware).
+        if state["suppressed"]:
+            state["suppressed"] = False
             return Response(content=EMPTY_ZIP, media_type="application/zip")
 
-        blob = make_calibration_zip(obs, manifest_only=state["manifest_only"])
+        # Single held GET: "build" (drive event polls), then stream the archive.
+        state["building"] = True
+        state["progress"] = 0
+        await asyncio.sleep(state["build_seconds"])  # build window (events report progress)
+        state["building"] = False
+        state["ended"] = True  # next event poll emits the terminal "ended"
 
+        blob = make_calibration_zip(obs, manifest_only=state["manifest_only"])
         if state["flaky_after"] > 0:
             cut = state["flaky_after"]
 
@@ -206,7 +206,6 @@ def create_app() -> FastAPI:
                 media_type="application/zip",
                 headers={"Content-Length": str(len(blob))},
             )
-
         return Response(content=blob, media_type="application/zip")
 
     return app

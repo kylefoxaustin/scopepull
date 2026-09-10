@@ -240,18 +240,28 @@ def pull(
 
 
 def _build_status(ev: object) -> str:
-    """Render a live build line: 'N/M frames · 2m10s · ~6m left' (best-effort ETA)."""
+    """Live line: 'building 187/364 frames · 3m20s' while building, then
+    'downloading 210MB · 512KB/s' once the archive streams."""
     done = getattr(ev, "frames_done", 0)
     total = getattr(ev, "frames_total", 0)
     elapsed = getattr(ev, "elapsed_s", 0.0)
+    nbytes = getattr(ev, "bytes_done", 0)
 
     def _dur(sec: float) -> str:
         sec = int(sec)
         return f"{sec // 60}m{sec % 60:02d}s" if sec >= 60 else f"{sec}s"
 
+    # No body bytes flow until the build finishes, so bytes>threshold == streaming.
+    if nbytes > 20_000:
+        mb = nbytes / 2**20
+        rate = nbytes / elapsed if elapsed > 0 else 0
+        rate_s = f"{rate / 2**20:.1f}MB/s" if rate > 2**20 else f"{rate / 1024:.0f}KB/s"
+        return f"downloading {mb:.0f}MB · {rate_s}"
     parts = []
     if total:
-        parts.append(f"{done}/{total} frames")
+        parts.append(f"building {done}/{total} frames")
+    else:
+        parts.append("building")
     parts.append(_dur(elapsed))
     if done and total and elapsed > 2 and done < total:
         rate = done / elapsed
@@ -309,21 +319,18 @@ def _pull(
                         spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
                         tick = 0
                         async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
-                            if ev.phase == "building" and ev.detail != "ended":
+                            if ev.phase == "downloading":
                                 tick += 1
                                 console.print(
-                                    f"  {label}: {spin[tick % len(spin)]} building "
-                                    f"{_build_status(ev)}",
+                                    f"  {label}: {spin[tick % len(spin)]} {_build_status(ev)}",
                                     end="\r",
                                     highlight=False,
                                 )
-                            elif ev.phase != last or ev.detail:
-                                # newline to finish any in-place building line
-                                console.print(
-                                    f"  {label}: {ev.phase}"
-                                    + (f" ({ev.detail})" if ev.detail else "")
-                                )
+                            elif ev.phase != last:
+                                console.print(f"  {label}: {ev.phase}")
                             last = ev.phase
+                        # finish the in-place line with a newline
+                        console.print()
                         res = ingest_zip(zip_path, obs, cfg, m)
                         zip_path.unlink(missing_ok=True)
                         console.print(
