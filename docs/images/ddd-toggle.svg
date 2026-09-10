@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" role="img" aria-label="Enable Direct Data Download — replace me">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+  <rect width="1000" height="420" fill="url(#bg)"/>
+  <rect x="1" y="1" width="998" height="418" fill="none" stroke="#30363d" stroke-width="2" rx="10"/>
+  <rect x="0" y="0" width="1000" height="6" fill="#e0af68"/>
+  <text x="500" y="186" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="46" text-anchor="middle">📲</text>
+  <text x="500" y="236" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#e6edf3" text-anchor="middle">Enable Direct Data Download — replace me</text>
+  <text x="500" y="266" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#8b949e" text-anchor="middle">screenshot: Unistellar app → Settings → telescope → Download</text>
+</svg>
