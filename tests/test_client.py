@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from scopepull.client import DDDNotEnabled, ScopeClient
+from scopepull.client import DDDNotEnabled, ScopeClient, ScopeUnreachable
 
 
 async def test_health(client):
@@ -27,6 +27,18 @@ async def test_ddd_disabled_detected(mock_app, scope_state):
         with pytest.raises(DDDNotEnabled):
             await c.list_observations()
         assert await c.ddd_enabled() is False
+
+
+@pytest.mark.parametrize("status", [403, 500, 503])
+async def test_listing_http_error_is_scope_unreachable(mock_app, scope_state, status):
+    """A non-2xx from the list endpoint must not escape as httpx.HTTPStatusError
+    (exit 1, raw traceback); it is ScopeUnreachable, so `pull` exits 3 with a
+    sentence. Found when `starstack --pull` ran with a proxy answering 403."""
+    scope_state["list_status"] = status
+    transport = httpx.ASGITransport(app=mock_app)
+    async with ScopeClient("http://192.168.100.1", transport=transport) as c:
+        with pytest.raises(ScopeUnreachable, match=f"HTTP {status}"):
+            await c.list_observations()
 
 
 async def test_ddd_enabled(client):

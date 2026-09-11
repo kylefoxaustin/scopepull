@@ -125,6 +125,7 @@ def create_app() -> FastAPI:
     state = {
         "last_poll": 0.0,
         "ddd_enabled": True,
+        "list_status": 0,  # non-zero: /api/observations/list answers with this HTTP status
         "manifest_only": False,
         "flaky_after": 0,
         "cancel_count": 0,
@@ -146,6 +147,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/observations/list")
     async def listing() -> Response:
+        if state["list_status"]:
+            return Response(status_code=state["list_status"], content="nope")
         if not state["ddd_enabled"]:
             return HTMLResponse(SPA_HTML)
         body = json.dumps(OBSERVATIONS).replace('"NAN_SENTINEL"', "NaN")
