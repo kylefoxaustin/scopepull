@@ -448,3 +448,35 @@ TCP_KEEPCNT=10 on its real transport (guarded per-platform; interval knobs
 applied where the OS exposes them). A tiny keepalive probe every ~20 s keeps
 the idle download socket alive through the whole build. Injected transports
 (tests' ASGITransport) are untouched.
+
+
+## Bayer pattern
+
+**The manifest's `type=BAYER_GBRG` is the sensor's pattern, not the export's.**
+Measured on real Odyssey Pro EnhancedVision frames (M81, 2026-02-01, 710 x
+StackInput): the four 2x2 phase means are
+
+    (0,0)=9090   (0,1)=11658
+    (1,0)=11584  (1,1)=8753
+
+The two greens are the pair that agree -- (0,1) and (1,0), the ANTI-diagonal --
+which is the RGGB/BGGR family. GBRG would put them on the main diagonal. The
+export is a 2x downsample of the sensor (1452x1094 from 2904x2192); a one-row
+offset between readout and export turns GBRG into RGGB, and Unistellar's own
+help page says eVscope / eQuinox / Odyssey raw frames are RGGB.
+
+Consequence: a FITS header saying `BAYERPAT=GBRG` on this data makes every
+downstream debayer put green pixels into the red and blue channels. Verified
+by stacking 12 real frames both ways and measuring M81's core against the sky:
+RGGB gives R/B 1.45, G/B 1.37 (the warm bulge you'd expect); GBRG gives
+R/B 1.07, G/B 0.93 (grey-magenta).
+
+So `ingest._bayer_pattern` now MEASURES the pattern from the first light's
+pixels (which diagonal holds the greens; statistics can't tell R from B, so the
+anti-diagonal family resolves to RGGB per Unistellar's docs and the main
+diagonal to the sensor's GBRG), falls back to the row-flipped sensor pattern
+when there is no sample, and writes the sensor's pattern as `SENSPAT` for the
+record. A flat frame (PlanetEV, already debayered) gets no `BAYERPAT` at all.
+
+Earlier notes in this file that say "raw GBRG Bayer" describe the sensor;
+read them as "raw Bayer, RGGB as stored".

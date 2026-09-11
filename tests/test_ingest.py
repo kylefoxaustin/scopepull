@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 from astropy.io import fits
 
 from scopepull.catalog import Observation
@@ -44,7 +45,10 @@ def test_ingest_fits_headers(tmp_path):
     f = sorted((res.dir / "frames").glob("*.fits"))[0]
     with fits.open(f) as hdul:
         h = hdul[0].header
-        assert h["BAYERPAT"] == "GBRG"
+        # measured from the pixels: real exports are RGGB as stored, even though
+        # the manifest says the SENSOR is GBRG (see ingest._measure_bayer_pattern)
+        assert h["BAYERPAT"] == "RGGB"
+        assert h["SENSPAT"] == "GBRG"
         assert h["OBJECT"] == "M101 - Pinwheel Galaxy"
         assert h["INSTRUME"] == "IMX415"
         assert abs(h["EXPTIME"] - 3.999977) < 1e-3
@@ -77,3 +81,25 @@ def test_ingest_skips_fits_when_disabled(tmp_path):
     assert res.fits_written == 0
     assert not list((res.dir / "frames").glob("*.fits"))
     m.close()
+
+
+def test_bayer_pattern_is_measured_not_assumed():
+    """The manifest's BAYER_GBRG is the sensor; the export's pixels decide."""
+    import io
+
+    import tifffile
+
+    from scopepull.ingest import _bayer_pattern, _measure_bayer_pattern
+    from tests.mock_scope import _bayer_frame
+
+    manifest = {"type": "BAYER_GBRG"}
+    anti = tifffile.imread(io.BytesIO(_bayer_frame(1, greens="anti")))
+    main = tifffile.imread(io.BytesIO(_bayer_frame(1, greens="main")))
+    assert _measure_bayer_pattern(anti, "GBRG") == "RGGB"      # what the real scope exports
+    assert _measure_bayer_pattern(main, "GBRG") == "GBRG"      # sensor-order mosaic
+    flat = np.full((120, 160), 20000, np.uint16)
+    assert _measure_bayer_pattern(flat, "GBRG") is None        # mono / debayered (PlanetEV)
+    assert _bayer_pattern(manifest, anti) == "RGGB"
+    assert _bayer_pattern(manifest, flat) is None              # pixels overrule the manifest
+    assert _bayer_pattern(manifest, None) == "RGGB"            # no sample: row-flipped sensor
+    assert _bayer_pattern({"type": "DEBAYERED"}, None) is None

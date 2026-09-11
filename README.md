@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-47%20passing-2ea043)](tests/)
 
-*Connect to the scope's Wi-Fi, run `scopepull`, and every observation you don't already have lands on disk as raw GBRG Bayer TIFF **and** science-ready FITS — with the master dark and the scope's own stack alongside it.*
+*Connect to the scope's Wi-Fi, run `scopepull`, and every observation you don't already have lands on disk as raw Bayer TIFF **and** science-ready FITS — with the master dark and the scope's own stack alongside it.*
 
 </div>
 
@@ -44,7 +44,7 @@ flowchart LR
 ```
 
 - 🟢 **One command** — `scopepull` pulls everything you don't already have. Safe to re-run (idempotent).
-- 🧬 **Raw science data** — deep-sky frames arrive as raw **GBRG Bayer** mosaics, converted to FITS locally with full headers (`BAYERPAT`, `EXPTIME`, `GAIN`, `RA`/`DEC`, `DATE-OBS`).
+- 🧬 **Raw science data** — deep-sky frames arrive as raw **Bayer** mosaics, converted to FITS locally with full headers (`BAYERPAT`, `EXPTIME`, `GAIN`, `RA`/`DEC`, `DATE-OBS`). `BAYERPAT` is **measured from the pixels** — the export is **RGGB as stored** even though the sensor is GBRG (see [docs/API.md](docs/API.md#bayer-pattern)).
 - 🎁 **The whole calibration set** — every observation ships its **master dark** and the **scope's own stack**, so you can re-stack the raw frames yourself and diff against what the scope did.
 - 🪟🐧 **Linux *and* Windows** — same code, verified pulling multi-GB observations on both.
 - 🛟 **Survives the flaky Pi Wi-Fi** — held-connection keepalive, atomic transactional ingest (no half-observations), retry at observation granularity.
@@ -140,7 +140,7 @@ Each observation becomes a self-contained folder — raw frames, calibration, th
 ```
 ~/Astro/odyssey/2026-01-31/m81-bode-s-galaxy__38102043/
 ├── frames/
-│   ├── ..._StackInput.tiff      # 🧬 raw GBRG Bayer light frames
+│   ├── ..._StackInput.tiff      # 🧬 raw Bayer light frames (RGGB as stored)
 │   └── ..._StackInput.fits      # ➕ same data as FITS (BAYERPAT, EXPTIME, RA/DEC…)
 ├── calibration/
 │   ├── ..._DarkframeMean.tiff   # 🌑 master dark

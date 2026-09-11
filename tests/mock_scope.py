@@ -74,13 +74,23 @@ OBSERVATIONS = [
 ]
 
 
-def _bayer_frame(seed: int, w: int = 160, h: int = 120) -> bytes:
+def _bayer_frame(seed: int, w: int = 160, h: int = 120, greens: str = "anti") -> bytes:
+    """A mosaic like the real StackInput export: the two GREEN phases are the
+    pair that agree. Real Odyssey Pro frames have them on the ANTI-diagonal,
+    (0,1) and (1,0) -> RGGB as stored (measured: 9090 / 11658 / 11584 / 8753).
+    greens="main" builds the sensor's own GBRG order, for the fallback test."""
     rng = np.random.default_rng(seed)
     a = rng.integers(2000, 3000, size=(h, w), dtype=np.uint16)
-    a[0::2, 0::2] += 8000
-    a[0::2, 1::2] += 12000
-    a[1::2, 0::2] += 4000
-    a[1::2, 1::2] += 8000
+    if greens == "anti":
+        a[0::2, 0::2] += 9000      # R
+        a[0::2, 1::2] += 11600     # G
+        a[1::2, 0::2] += 11600     # G
+        a[1::2, 1::2] += 8700      # B
+    else:
+        a[0::2, 0::2] += 11600     # G
+        a[0::2, 1::2] += 8700      # B
+        a[1::2, 0::2] += 9000      # R
+        a[1::2, 1::2] += 11600     # G
     buf = io.BytesIO()
     tifffile.imwrite(buf, a, compression="lzw")
     return buf.getvalue()
