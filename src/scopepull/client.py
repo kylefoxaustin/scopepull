@@ -317,7 +317,18 @@ class ScopeClient:
                     "Direct Data Download in the Unistellar app "
                     "(Settings → telescope → Download → Direct Data Download)"
                 )
-            resp.raise_for_status()
+            # A non-2xx here is the scope (or something between us and it --
+            # a captive portal, a proxy, the wrong IP answering) refusing the
+            # API. Left as httpx.HTTPStatusError it escapes _pull() as a raw
+            # traceback with exit code 1, which callers such as
+            # `starstack --pull` cannot interpret. Say what it is and exit 3.
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise ScopeUnreachable(
+                    f"scope answered HTTP {resp.status_code} for "
+                    f"{resp.request.url.path} -- is {resp.request.url.host} really the scope?"
+                ) from e
             return parse_listing(resp.text)
         raise ScopeUnreachable(f"listing failed after {attempts} attempts") from last_exc
 
