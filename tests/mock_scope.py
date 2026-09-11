@@ -82,15 +82,15 @@ def _bayer_frame(seed: int, w: int = 160, h: int = 120, greens: str = "anti") ->
     rng = np.random.default_rng(seed)
     a = rng.integers(2000, 3000, size=(h, w), dtype=np.uint16)
     if greens == "anti":
-        a[0::2, 0::2] += 9000      # R
-        a[0::2, 1::2] += 11600     # G
-        a[1::2, 0::2] += 11600     # G
-        a[1::2, 1::2] += 8700      # B
+        a[0::2, 0::2] += 9000  # R
+        a[0::2, 1::2] += 11600  # G
+        a[1::2, 0::2] += 11600  # G
+        a[1::2, 1::2] += 8700  # B
     else:
-        a[0::2, 0::2] += 11600     # G
-        a[0::2, 1::2] += 8700      # B
-        a[1::2, 0::2] += 9000      # R
-        a[1::2, 1::2] += 11600     # G
+        a[0::2, 0::2] += 11600  # G
+        a[0::2, 1::2] += 8700  # B
+        a[1::2, 0::2] += 9000  # R
+        a[1::2, 1::2] += 11600  # G
     buf = io.BytesIO()
     tifffile.imwrite(buf, a, compression="lzw")
     return buf.getvalue()

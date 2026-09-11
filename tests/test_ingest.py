@@ -95,11 +95,11 @@ def test_bayer_pattern_is_measured_not_assumed():
     manifest = {"type": "BAYER_GBRG"}
     anti = tifffile.imread(io.BytesIO(_bayer_frame(1, greens="anti")))
     main = tifffile.imread(io.BytesIO(_bayer_frame(1, greens="main")))
-    assert _measure_bayer_pattern(anti, "GBRG") == "RGGB"      # what the real scope exports
-    assert _measure_bayer_pattern(main, "GBRG") == "GBRG"      # sensor-order mosaic
+    assert _measure_bayer_pattern(anti, "GBRG") == "RGGB"  # what the real scope exports
+    assert _measure_bayer_pattern(main, "GBRG") == "GBRG"  # sensor-order mosaic
     flat = np.full((120, 160), 20000, np.uint16)
-    assert _measure_bayer_pattern(flat, "GBRG") is None        # mono / debayered (PlanetEV)
+    assert _measure_bayer_pattern(flat, "GBRG") is None  # mono / debayered (PlanetEV)
     assert _bayer_pattern(manifest, anti) == "RGGB"
-    assert _bayer_pattern(manifest, flat) is None              # pixels overrule the manifest
-    assert _bayer_pattern(manifest, None) == "RGGB"            # no sample: row-flipped sensor
+    assert _bayer_pattern(manifest, flat) is None  # pixels overrule the manifest
+    assert _bayer_pattern(manifest, None) == "RGGB"  # no sample: row-flipped sensor
     assert _bayer_pattern({"type": "DEBAYERED"}, None) is None

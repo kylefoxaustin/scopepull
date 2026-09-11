@@ -108,19 +108,21 @@ def _measure_bayer_pattern(arr: np.ndarray, sensor: str | None) -> str | None:
     if arr.ndim != 2 or min(arr.shape) < 16:
         return None
     a = arr.astype(np.float64)
-    a = np.minimum(a, np.percentile(a, 98))          # keep stars out of the statistics
+    a = np.minimum(a, np.percentile(a, 98))  # keep stars out of the statistics
     ph = {
-        (0, 0): a[0::2, 0::2].mean(), (0, 1): a[0::2, 1::2].mean(),
-        (1, 0): a[1::2, 0::2].mean(), (1, 1): a[1::2, 1::2].mean(),
+        (0, 0): a[0::2, 0::2].mean(),
+        (0, 1): a[0::2, 1::2].mean(),
+        (1, 0): a[1::2, 0::2].mean(),
+        (1, 1): a[1::2, 1::2].mean(),
     }
     vals = np.array(list(ph.values()))
     spread = vals.max() - vals.min()
     if vals.mean() <= 0 or spread / vals.mean() < 0.03:
-        return None                                   # flat: mono / debayered (e.g. PlanetEV)
+        return None  # flat: mono / debayered (e.g. PlanetEV)
     d_main = abs(ph[(0, 0)] - ph[(1, 1)])
     d_anti = abs(ph[(0, 1)] - ph[(1, 0)])
     if min(d_main, d_anti) > 0.5 * spread:
-        return None                                   # no matching pair: not a Bayer mosaic
+        return None  # no matching pair: not a Bayer mosaic
     if d_anti <= d_main:
         # greens on the anti-diagonal: RGGB or BGGR. Unistellar documents RGGB.
         return "RGGB" if sensor not in ("BGGR",) else "BGGR"
@@ -137,7 +139,7 @@ def _bayer_pattern(manifest: dict[str, Any], sample: np.ndarray | None = None) -
         if measured:
             return measured
         if sensor:
-            return None                     # sensor says Bayer, pixels say mono: trust pixels
+            return None  # sensor says Bayer, pixels say mono: trust pixels
     return _ROW_FLIP.get(sensor) if sensor else None
 
 
