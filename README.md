@@ -6,11 +6,11 @@
 
 **One command. Raw Bayer FITS off your Unistellar Odyssey Pro — verified, organized, done.**
 
-[![CI](https://img.shields.io/badge/CI-ubuntu%20%2B%20windows-2ea043)](.github/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-3776ab)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/scopepull)](https://pypi.org/project/scopepull/)
+[![CI](https://github.com/kylefoxaustin/scopepull/actions/workflows/ci.yml/badge.svg)](https://github.com/kylefoxaustin/scopepull/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/scopepull)](pyproject.toml)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-555)](#-install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-47%20passing-2ea043)](tests/)
 
 *Connect to the scope's Wi-Fi, run `scopepull`, and every observation you don't already have lands on disk as raw Bayer TIFF **and** science-ready FITS — with the master dark and the scope's own stack alongside it.*
 
@@ -53,14 +53,19 @@ flowchart LR
 <img src="docs/images/cli-pull.svg" alt="scopepull pull in action" width="90%">
 </div>
 
+> 🦉 **Pairs with [starstack](https://github.com/kylefoxaustin/starstack)** — the companion stacker
+> reads a scopepull archive directly (darks, Bayer pattern, and all), so the whole loop is
+> `scopepull` → `starstack` = telescope to stacked image. starstack can even call scopepull for you:
+> `starstack --pull`.
+
 ---
 
 ## 🚀 Install
 
 ```bash
-uv tool install scopepull      # or:  pipx install scopepull
+uv tool install scopepull      # or:  pipx install scopepull  /  pip install scopepull
 ```
-<sub>(pre-release: `git clone` + `uv sync`, then `uv run scopepull …`)</sub>
+<sub>Or from source: `git clone` + `uv sync`, then `uv run scopepull …`</sub>
 
 ## ⚡ Quickstart
 
@@ -218,7 +223,7 @@ This is exactly how the biggest observation (710 frames, 2.3 GB) was pulled reli
 
 ```bash
 uv sync --group dev
-uv run pytest          # 47 tests, incl. a FastAPI mock of the scope's protocol
+uv run pytest          # 51 tests, incl. a FastAPI mock of the scope's protocol
 uv run ruff check src tests
 uv run mypy
 ```
