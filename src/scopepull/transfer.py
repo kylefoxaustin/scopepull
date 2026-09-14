@@ -30,6 +30,7 @@ import httpx
 
 from .catalog import Observation
 from .client import PumpDead, ScopeClient
+from .fsutil import replace_retry
 
 CHUNK = 256 * 1024
 # A not-ready/failed export is a ~10 KB empty zip (PK\x05\x06 + padding).
@@ -133,5 +134,6 @@ async def pull(
             f"{obs.target}: export returned no frames ({n} bytes) — the scope may "
             "be busy or a stale job was active; try again"
         )
-    partial.replace(dest_zip)
+    # Defender may still be scanning the file we just closed; wait it out.
+    replace_retry(partial, dest_zip)
     yield ProgressEvent(obs.obs_id, "done", bytes_done=n)

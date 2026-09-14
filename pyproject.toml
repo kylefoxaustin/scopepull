@@ -1,6 +1,6 @@
 [project]
 name = "scopepull"
-version = "0.1.0"
+version = "0.1.1"
 description = "One-shot stack puller for Unistellar Odyssey Pro telescopes"
 readme = "README.md"
 license = { file = "LICENSE" }

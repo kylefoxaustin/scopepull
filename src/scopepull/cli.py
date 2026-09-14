@@ -20,6 +20,7 @@ from . import __version__
 from .catalog import Observation
 from .client import DDDNotEnabled, ScopeClient, ScopeUnreachable
 from .config import Config
+from .fsutil import unlink_retry
 from .ingest import ingest_zip
 from .manifest import Manifest
 from .netcheck import check as netcheck_check
@@ -336,7 +337,7 @@ def _pull(
                         if on_progress_line:
                             console.print()
                         res = ingest_zip(zip_path, obs, cfg, m)
-                        zip_path.unlink(missing_ok=True)
+                        unlink_retry(zip_path)
                         console.print(
                             f"  {label}: [green]ingested[/] "
                             f"{res.light_count} frames, {res.fits_written} FITS"
@@ -344,7 +345,7 @@ def _pull(
                     except TransferError as e:
                         err_console.print(f"  {label}: [red]failed[/] — {e}")
                         failed.append(obs.target)
-                        zip_path.unlink(missing_ok=True)
+                        unlink_retry(zip_path)
 
                 if failed:
                     err_console.print(

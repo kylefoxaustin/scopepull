@@ -38,6 +38,7 @@ from astropy.io import fits
 
 from .catalog import Observation
 from .config import Config
+from .fsutil import replace_retry
 from .manifest import Manifest
 
 # TIFF role classification by filename (case-insensitive substring).
@@ -271,7 +272,7 @@ def ingest_zip(
     obs_dir.parent.mkdir(parents=True, exist_ok=True)
     if obs_dir.exists():
         shutil.rmtree(obs_dir)
-    partial.replace(obs_dir)
+    replace_retry(partial, obs_dir)  # same Defender race as the zip rename
 
     manifest_db.record(
         obs_id=obs.obs_id,
