@@ -103,3 +103,32 @@ def test_bayer_pattern_is_measured_not_assumed():
     assert _bayer_pattern(manifest, flat) is None  # pixels overrule the manifest
     assert _bayer_pattern(manifest, None) == "RGGB"  # no sample: row-flipped sensor
     assert _bayer_pattern({"type": "DEBAYERED"}, None) is None
+
+
+def test_nan_manifest_numbers_are_left_out_of_fits_headers(tmp_path):
+    """The Odyssey writes ra/dec as NaN on an observation it never solved
+    (an aborted Western Veil, live). FITS can't hold NaN; astropy raised and
+    0.1.1 lost the whole pull. Now the key is simply absent."""
+    import copy
+    import json
+
+    from tests.mock_scope import make_calibration_zip as mk
+
+    raw = copy.deepcopy(OBSERVATIONS[0])
+    raw["ra"] = float("nan")
+    raw["dec"] = float("nan")
+    raw["gain"] = float("inf")
+    zip_path = tmp_path / "obs.zip"
+    zip_path.write_bytes(mk(raw))  # json.dumps writes NaN/Infinity, like the scope
+    assert "NaN" in json.dumps(raw)
+    obs = Observation.from_raw(raw)
+    cfg = Config(archive_root=tmp_path / "archive", format="tiff")
+    m = Manifest(tmp_path / "m.db")
+    res = ingest_zip(zip_path, obs, cfg, m)
+    f = sorted((res.dir / "frames").glob("*.fits"))[0]
+    with fits.open(f) as hdul:
+        h = hdul[0].header
+        assert "RA" not in h and "DEC" not in h and "GAIN" not in h
+        assert abs(h["EXPTIME"] - 3.999977) < 1e-3  # the finite ones still land
+        assert h["OBJECT"] == "M101 - Pinwheel Galaxy"
+    m.close()

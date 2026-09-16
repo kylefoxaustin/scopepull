@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import shutil
+from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -24,7 +26,7 @@ from .fsutil import unlink_retry
 from .ingest import ingest_zip
 from .manifest import Manifest
 from .netcheck import check as netcheck_check
-from .transfer import TransferError
+from .transfer import ProgressEvent, TransferError, zip_has_frames
 from .transfer import pull as transfer_pull
 
 app = typer.Typer(
@@ -240,6 +242,13 @@ def pull(
     _pull(new=new, all_=not new, ip=ip, since=since, target=target, fmt=fmt, dest=dest)
 
 
+async def _reuse_zip(obs: Observation, zip_path: Path) -> AsyncIterator[ProgressEvent]:
+    """Stand-in for transfer_pull when the zip is already here and valid."""
+    n = zip_path.stat().st_size
+    yield ProgressEvent(obs.obs_id, "already downloaded", bytes_done=n)
+    yield ProgressEvent(obs.obs_id, "done", bytes_done=n)
+
+
 def _build_status(ev: object) -> str:
     """Live line: 'building 187/364 frames · 3m20s' while building, then
     'downloading 210MB · 512KB/s' once the archive streams."""
@@ -320,7 +329,15 @@ def _pull(
                         spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
                         tick = 0
                         on_progress_line = False
-                        async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
+                        # A complete, frame-bearing zip left over from a run that died
+                        # after the download (ingest failure, crash) is reused, not
+                        # re-fetched: 1.2 GB of NGC 7217 should be pulled once.
+                        events = (
+                            _reuse_zip(obs, zip_path)
+                            if zip_path.exists() and zip_has_frames(zip_path)
+                            else transfer_pull(client, obs, zip_path, fmt=cfg.format)
+                        )
+                        async for ev in events:
                             if ev.phase == "downloading":
                                 tick += 1
                                 # ljust pads over any longer previous line so it
@@ -336,7 +353,15 @@ def _pull(
                             last = ev.phase
                         if on_progress_line:
                             console.print()
-                        res = ingest_zip(zip_path, obs, cfg, m)
+                        try:
+                            res = ingest_zip(zip_path, obs, cfg, m)
+                        except Exception as e:  # one bad manifest must not end the night
+                            err_console.print(
+                                f"  {label}: [red]ingest failed[/] — {type(e).__name__}: {e} "
+                                f"(zip kept at {zip_path}; retried next run)"
+                            )
+                            failed.append(obs.target)
+                            continue
                         unlink_retry(zip_path)
                         console.print(
                             f"  {label}: [green]ingested[/] "
