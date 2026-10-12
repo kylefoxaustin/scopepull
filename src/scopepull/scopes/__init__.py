@@ -40,7 +40,7 @@ LABELS: dict[str, str] = {
     "odyssey": "Unistellar Odyssey Pro",
     "seestar": "ZWO Seestar S50 / S50 Pro",
 }
-SCOPE_NAMES: tuple[str, ...] = ("odyssey",)
+SCOPE_NAMES: tuple[str, ...] = ("odyssey", "seestar")
 DEFAULT_SCOPE = "odyssey"
 
 
@@ -113,6 +113,12 @@ def get_scope(name: str, cfg: Config, **opts: Any) -> Scope:
         from .odyssey import OdysseyScope
 
         return OdysseyScope(cfg, **opts)
+    if name == "seestar":
+        from .seestar import SeestarScope
+
+        # The Seestar is a folder: --new/--since/--format mean nothing to it
+        # (it dedupes by name and size against the archive itself).
+        return SeestarScope(cfg)
     raise KeyError(name)
 
 

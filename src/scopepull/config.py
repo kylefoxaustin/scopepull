@@ -29,18 +29,33 @@ def manifest_db_path() -> Path:
     return data_dir() / "manifest.db"
 
 
-def default_archive_root() -> Path:
-    # ~/Astro/odyssey on Linux, %USERPROFILE%\Astro\odyssey on Windows.
-    return Path.home() / "Astro" / "odyssey"
+def default_archive_root(scope: str = "odyssey") -> Path:
+    # ~/Astro/<scope> on Linux, %USERPROFILE%\Astro\<scope> on Windows.
+    # One root per scope: the two archives have different layouts inside a
+    # night, and keeping them apart means `index` and `combine` never have to
+    # guess which kind of session they are looking at.
+    return Path.home() / "Astro" / scope
 
 
 @dataclass
 class Config:
     scope_ip: str = DEFAULT_SCOPE_IP
+    # The Odyssey's root. Still a field of its own because `status` prints it as
+    # "Archive root:" and starstack parses that line (docs/STARSTACK.md).
     archive_root: Path = field(default_factory=default_archive_root)
+    # Per-scope overrides, from [archive_roots] in config.toml.
+    archive_roots: dict[str, Path] = field(default_factory=dict)
     # FITS export is broken on Odyssey fw 4.2 and PNG is flaky; TIFF is lossless
     # and reliable, converted to FITS locally during ingest. See docs/API.md.
     format: str = "tiff"
+
+    def root_for(self, scope: str) -> Path:
+        """Where this scope keeps its nights."""
+        if scope in self.archive_roots:
+            return self.archive_roots[scope]
+        if scope == "odyssey":
+            return self.archive_root
+        return default_archive_root(scope)
 
     @property
     def base_url(self) -> str:
@@ -60,6 +75,15 @@ class Config:
         archive_root = raw.get("archive_root")
         if isinstance(archive_root, str):
             cfg.archive_root = Path(archive_root).expanduser()
+        roots = raw.get("archive_roots")
+        if isinstance(roots, dict):
+            for name, value in roots.items():
+                if isinstance(value, str):
+                    cfg.archive_roots[str(name)] = Path(value).expanduser()
+            # [archive_roots] odyssey = ... and the legacy top-level
+            # archive_root are the same setting; the explicit one wins.
+            if "odyssey" in cfg.archive_roots:
+                cfg.archive_root = cfg.archive_roots["odyssey"]
         fmt = raw.get("format")
         if fmt in ("fits", "tiff", "png"):
             cfg.format = fmt

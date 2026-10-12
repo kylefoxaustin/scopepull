@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
+from .archive import archive_index, combine_target, summarize
 from .catalog import Observation, filter_observations
 from .client import DDDNotEnabled, ScopeClient, ScopeUnreachable
 from .config import Config
@@ -33,6 +34,7 @@ from .scopes import (
     EXIT_OK,
     EXIT_PARTIAL,
     EXIT_UNREACHABLE,
+    LABELS,
     SCOPE_NAMES,
     Scope,
     get_scope,
@@ -74,7 +76,9 @@ def _console_log() -> Log:
     """
 
     def write(text: str) -> None:
-        console.print(text, highlight=False, markup=False)
+        # soft_wrap: never fold a long line. The window and starstack read
+        # these lines, and a path broken across two lines is a broken path.
+        console.print(text, highlight=False, markup=False, soft_wrap=True)
 
     def raw(text: str) -> None:
         if text.endswith("\r"):
@@ -232,17 +236,24 @@ def _report(label: str, good: bool, detail: str) -> None:
 
 @app.command()
 def status() -> None:
-    """Local archive summary."""
+    """Local archive summary, per scope."""
     cfg = Config.load()
     with Manifest() as m:
         n, total = m.totals()
         rows = m.all_observations()
     # starstack parses this exact line to honour archive_root — docs/STARSTACK.md.
+    # It has to stay the first line, and it is the Odyssey's root.
     console.print(f"Archive root: {cfg.archive_root}")
     console.print(f"{n} observation(s) archived, {total / 2**30:.2f} GiB")
     if rows:
         last = rows[-1]
         console.print(f"Last pull: {last.pulled_at} ({last.target})")
+    console.print()
+    for name in SCOPE_NAMES:
+        root = cfg.root_for(name)
+        console.print(f"[bold]{LABELS[name]}[/]")
+        console.print(f"  {root}")
+        console.print(f"  {summarize(archive_index(root, scope=name))}")
 
 
 @app.command()
@@ -256,6 +267,69 @@ def cancel(ip: IpOpt = None) -> None:
 
     asyncio.run(go())
     console.print("Cancel sent.")
+
+
+@app.command("find")
+def find_cmd(scope: ScopeOpt = None, at: AtOpt = None, ip: IpOpt = None) -> None:
+    """Say where a scope is right now, and nothing else."""
+    cfg = _load_config(ip)
+    sc = _pick_scope(scope, cfg)
+    found = sc.find(at or ip, _console_log())
+    if not found:
+        err_console.print(f"[red]no {sc.label} found:[/] {found.how}", soft_wrap=True)
+        raise typer.Exit(found.code or EXIT_UNREACHABLE)
+    console.print(f"found {sc.label} {found.how}", soft_wrap=True)
+
+
+RootOpt = Annotated[
+    str | None,
+    typer.Option("--root", help="Use this archive folder instead of the scope's"),
+]
+NightsOpt = Annotated[
+    str | None, typer.Option("--nights", help="Only these nights: 2026-09-22,2026-10-04")
+]
+
+
+@app.command("index")
+def index_cmd(
+    scope: ScopeOpt = None,
+    root: RootOpt = None,
+    all_scopes: Annotated[
+        bool, typer.Option("--all-scopes", help="Every scope's archive in one listing")
+    ] = False,
+) -> None:
+    """What the archive holds: one JSON object per session, newest night first.
+
+    This is the window's archive table, and it is deliberately machine-readable
+    — plain stdout, one object per line, no wrapping and no colour.
+    """
+    cfg = Config.load()
+    names = list(SCOPE_NAMES) if all_scopes else [_scope_or_exit(scope)]
+    for name in names:
+        folder = Path(root).expanduser() if root else cfg.root_for(name)
+        for session in archive_index(folder, scope=name):
+            print(_json.dumps(session.as_dict()))
+
+
+@app.command()
+def combine(
+    target: Annotated[str, typer.Argument(help="Target name, as `index` spells it")],
+    scope: ScopeOpt = None,
+    nights: NightsOpt = None,
+    root: RootOpt = None,
+) -> None:
+    """Gather every night of one target into combined/<target>/ for a stacker.
+
+    Hard links, so it costs no disk, and the nights themselves are untouched.
+    """
+    cfg = Config.load()
+    name = _scope_or_exit(scope)
+    folder = Path(root).expanduser() if root else cfg.root_for(name)
+    only = [n.strip() for n in nights.split(",") if n.strip()] if nights else None
+    dest = combine_target(folder, target, only, _console_log())
+    if dest is None:
+        raise typer.Exit(EXIT_ERROR)
+    console.print(f"combined: {dest}", soft_wrap=True)
 
 
 @app.command()
@@ -280,13 +354,16 @@ def pull(
     _run_pull(scope=scope, new=new, ip=ip, at=at, since=since, target=target, fmt=fmt, dest=dest)
 
 
-def _pick_scope(scope: str | None, cfg: Config, **opts: Any) -> Scope:
+def _scope_or_exit(scope: str | None) -> str:
     try:
-        name = scope_name(scope)
+        return scope_name(scope)
     except KeyError:
         err_console.print(f"[red]Unknown scope {scope!r}[/] — known: {', '.join(SCOPE_NAMES)}")
         raise typer.Exit(EXIT_ERROR) from None
-    return get_scope(name, cfg, **opts)
+
+
+def _pick_scope(scope: str | None, cfg: Config, **opts: Any) -> Scope:
+    return get_scope(_scope_or_exit(scope), cfg, **opts)
 
 
 def _run_pull(
@@ -301,14 +378,22 @@ def _run_pull(
     dest: str | None,
 ) -> None:
     cfg = _load_config(ip)
-    sc = _pick_scope(scope, cfg, new=new, since=since, fmt=fmt)
+    name = _scope_or_exit(scope)
+    if name != "odyssey" and (since or fmt):
+        # Say so rather than silently ignoring them: a Seestar pull is a file
+        # copy, dated by filename and already in FITS, so there is nothing for
+        # --since or --format to do yet.
+        err_console.print(
+            f"[yellow]--since/--format don't apply to the {LABELS[name]} — ignoring them.[/]"
+        )
+    sc = get_scope(name, cfg, new=new, since=since, fmt=fmt)
     log = _console_log()
 
     found = sc.find(at or ip, log)
     if not found:
-        err_console.print(f"[red]{found.how}[/]")
+        err_console.print(f"[red]{found.how}[/]", soft_wrap=True)
         raise typer.Exit(found.code or EXIT_UNREACHABLE)
-    console.print(f"Found {sc.label} {found.how}.")
+    console.print(f"Found {sc.label} {found.how}.", soft_wrap=True)
 
     root = Path(dest).expanduser() if dest else sc.archive_root()
     root.mkdir(parents=True, exist_ok=True)
