@@ -126,3 +126,20 @@ def parse_listing(body: str) -> list[Observation]:
 
     out = [Observation.from_raw(o) for o in items if isinstance(o, dict)]
     return [o for o in out if o.vpath]
+
+
+def filter_observations(
+    observations: list[Observation], since: str | None, target: str | None
+) -> list[Observation]:
+    """`--since`/`--target` as the CLI and every scope apply them: a date cut
+    on the observation start, and a case-insensitive substring of the target
+    name (or of the scope's own name for it)."""
+    if since:
+        cutoff = datetime.fromisoformat(since).astimezone()
+        observations = [
+            o for o in observations if o.started_at and o.started_at.astimezone() >= cutoff
+        ]
+    if target:
+        t = target.lower()
+        observations = [o for o in observations if t in o.target.lower() or t in o.name.lower()]
+    return observations

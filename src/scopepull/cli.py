@@ -1,7 +1,10 @@
 """scopepull CLI — thin typer+rich layer over the library.
 
-Phase 1 surface: list, doctor, status, cancel. pull/pick arrive in Phases 2-3.
-Exit codes (spec §4): 0 ok, 2 nothing new, 3 scope unreachable, 4 DDD disabled.
+Commands: list, doctor, status, cancel, pull. `pull` goes through the Scope
+protocol (scopes/__init__.py), so `--scope` picks the telescope and everything
+below this layer is scope-agnostic.
+Exit codes (spec §4): 0 ok, 2 nothing new, 3 scope unreachable, 4 DDD disabled,
+5 partial. They are a contract — starstack and the window read them.
 """
 
 from __future__ import annotations
@@ -9,38 +12,50 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import shutil
-from datetime import datetime
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .catalog import Observation
+from .catalog import Observation, filter_observations
 from .client import DDDNotEnabled, ScopeClient, ScopeUnreachable
 from .config import Config
-from .fsutil import unlink_retry
-from .ingest import ingest_zip
+from .log import Log
 from .manifest import Manifest
 from .netcheck import check as netcheck_check
-from .transfer import TransferError
-from .transfer import pull as transfer_pull
+from .scopes import (
+    EXIT_DDD_DISABLED,
+    EXIT_ERROR,
+    EXIT_NOTHING_NEW,
+    EXIT_OK,
+    EXIT_PARTIAL,
+    EXIT_UNREACHABLE,
+    SCOPE_NAMES,
+    Scope,
+    get_scope,
+    scope_name,
+)
+
+__all__ = [
+    "EXIT_DDD_DISABLED",
+    "EXIT_NOTHING_NEW",
+    "EXIT_OK",
+    "EXIT_PARTIAL",
+    "EXIT_UNREACHABLE",
+    "app",
+]
 
 app = typer.Typer(
     name="scopepull",
-    help="One-shot stack puller for Unistellar Odyssey Pro telescopes.",
+    help="Gets the night off your smart scope: Unistellar Odyssey Pro, ZWO Seestar.",
     no_args_is_help=False,
     add_completion=False,
 )
 console = Console()
 err_console = Console(stderr=True)
-
-EXIT_OK = 0
-EXIT_NOTHING_NEW = 2
-EXIT_UNREACHABLE = 3
-EXIT_DDD_DISABLED = 4
-EXIT_PARTIAL = 5
 
 
 def _load_config(ip: str | None) -> Config:
@@ -50,7 +65,41 @@ def _load_config(ip: str | None) -> Config:
     return cfg
 
 
+def _console_log() -> Log:
+    """The owl's voice on a terminal.
+
+    Plain lines (no rich markup: the same text goes to the window and to log
+    files) printed through rich so odd consoles still get the encoding right,
+    plus the raw channel for the in-place progress line.
+    """
+
+    def write(text: str) -> None:
+        console.print(text, highlight=False, markup=False)
+
+    def raw(text: str) -> None:
+        if text.endswith("\r"):
+            console.print(text[:-1], end="\r", highlight=False, markup=False, soft_wrap=True)
+        elif text == "\n":
+            console.print()
+        else:
+            console.print(text, end="", highlight=False, markup=False, soft_wrap=True)
+
+    return Log(write, raw)
+
+
 IpOpt = Annotated[str | None, typer.Option("--ip", help="Scope IP (default from config)")]
+ScopeOpt = Annotated[
+    str | None,
+    typer.Option("--scope", help=f"Which telescope: {' | '.join(SCOPE_NAMES)} (default odyssey)"),
+]
+AtOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--at",
+        help="Where the scope is: an IP (Odyssey) or a drive/share/host (Seestar)",
+        metavar="SPEC",
+    ),
+]
 
 
 @app.callback(invoke_without_command=True)
@@ -62,8 +111,10 @@ def main(
         console.print(f"scopepull {__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
-        # Bare `scopepull` == `scopepull pull --new`.
-        _pull(new=True, all_=False, ip=None, since=None, target=None, fmt=None, dest=None)
+        # Bare `scopepull` == `scopepull pull --new`, the Odyssey, as always.
+        _run_pull(
+            scope=None, new=True, ip=None, at=None, since=None, target=None, fmt=None, dest=None
+        )
 
 
 @app.command("list")
@@ -91,7 +142,7 @@ def list_cmd(
         err_console.print(f"[red]{e}[/]")
         raise typer.Exit(EXIT_DDD_DISABLED) from None
 
-    observations = _filter(observations, since, target)
+    observations = filter_observations(observations, since, target)
     with Manifest() as m:
         local = m.local_ids()
 
@@ -127,20 +178,6 @@ def list_cmd(
     console.print(table)
     new = sum(1 for o in observations if o.obs_id not in local)
     console.print(f"{len(observations)} observation(s), [bold]{new} not yet local[/]")
-
-
-def _filter(
-    observations: list[Observation], since: str | None, target: str | None
-) -> list[Observation]:
-    if since:
-        cutoff = datetime.fromisoformat(since).astimezone()
-        observations = [
-            o for o in observations if o.started_at and o.started_at.astimezone() >= cutoff
-        ]
-    if target:
-        t = target.lower()
-        observations = [o for o in observations if t in o.target.lower() or t in o.name.lower()]
-    return observations
 
 
 @app.command()
@@ -200,6 +237,7 @@ def status() -> None:
     with Manifest() as m:
         n, total = m.totals()
         rows = m.all_observations()
+    # starstack parses this exact line to honour archive_root — docs/STARSTACK.md.
     console.print(f"Archive root: {cfg.archive_root}")
     console.print(f"{n} observation(s) archived, {total / 2**30:.2f} GiB")
     if rows:
@@ -222,7 +260,9 @@ def cancel(ip: IpOpt = None) -> None:
 
 @app.command()
 def pull(
+    scope: ScopeOpt = None,
     ip: IpOpt = None,
+    at: AtOpt = None,
     new: Annotated[
         bool,
         typer.Option(
@@ -236,125 +276,44 @@ def pull(
     ] = None,
     dest: Annotated[str | None, typer.Option(help="Archive root override")] = None,
 ) -> None:
-    """Pull observations, verify, and ingest into the archive."""
-    _pull(new=new, all_=not new, ip=ip, since=since, target=target, fmt=fmt, dest=dest)
+    """Pull everything the archive hasn't got, verify, and ingest it."""
+    _run_pull(scope=scope, new=new, ip=ip, at=at, since=since, target=target, fmt=fmt, dest=dest)
 
 
-def _build_status(ev: object) -> str:
-    """Live line: 'building 187/364 frames · 3m20s' while building, then
-    'downloading 210MB · 512KB/s' once the archive streams."""
-    done = getattr(ev, "frames_done", 0)
-    total = getattr(ev, "frames_total", 0)
-    elapsed = getattr(ev, "elapsed_s", 0.0)
-    nbytes = getattr(ev, "bytes_done", 0)
-
-    def _dur(sec: float) -> str:
-        sec = int(sec)
-        return f"{sec // 60}m{sec % 60:02d}s" if sec >= 60 else f"{sec}s"
-
-    # No body bytes flow until the build finishes, so bytes>threshold == streaming.
-    if nbytes > 20_000:
-        mb = nbytes / 2**20
-        rate = nbytes / elapsed if elapsed > 0 else 0
-        rate_s = f"{rate / 2**20:.1f}MB/s" if rate > 2**20 else f"{rate / 1024:.0f}KB/s"
-        return f"downloading {mb:.0f}MB · {rate_s}"
-    parts = []
-    if total:
-        parts.append(f"building {done}/{total} frames")
-    else:
-        parts.append("building")
-    parts.append(_dur(elapsed))
-    if done and total and elapsed > 2 and done < total:
-        rate = done / elapsed
-        if rate > 0:
-            parts.append(f"~{_dur((total - done) / rate)} left")
-    return " · ".join(parts)
+def _pick_scope(scope: str | None, cfg: Config, **opts: Any) -> Scope:
+    try:
+        name = scope_name(scope)
+    except KeyError:
+        err_console.print(f"[red]Unknown scope {scope!r}[/] — known: {', '.join(SCOPE_NAMES)}")
+        raise typer.Exit(EXIT_ERROR) from None
+    return get_scope(name, cfg, **opts)
 
 
-def _pull(
+def _run_pull(
     *,
+    scope: str | None,
     new: bool,
-    all_: bool,
     ip: str | None,
+    at: str | None,
     since: str | None,
     target: str | None,
     fmt: str | None,
     dest: str | None,
 ) -> None:
     cfg = _load_config(ip)
-    if fmt:
-        cfg.format = fmt
-    if dest:
-        from pathlib import Path
+    sc = _pick_scope(scope, cfg, new=new, since=since, fmt=fmt)
+    log = _console_log()
 
-        cfg.archive_root = Path(dest).expanduser()
+    found = sc.find(at or ip, log)
+    if not found:
+        err_console.print(f"[red]{found.how}[/]")
+        raise typer.Exit(found.code or EXIT_UNREACHABLE)
+    console.print(f"Found {sc.label} {found.how}.")
 
-    async def go() -> int:
-        async with ScopeClient(cfg.base_url) as client:
-            try:
-                observations = await client.list_observations()
-            except ScopeUnreachable as e:
-                err_console.print(f"[red]Scope unreachable:[/] {e}")
-                return EXIT_UNREACHABLE
-            except DDDNotEnabled as e:
-                err_console.print(f"[red]{e}[/]")
-                return EXIT_DDD_DISABLED
-
-            observations = _filter(observations, since, target)
-            with Manifest() as m:
-                if new:
-                    local = m.local_ids()
-                    observations = [o for o in observations if o.obs_id not in local]
-                if not observations:
-                    console.print("[green]Nothing new to pull.[/]")
-                    return EXIT_NOTHING_NEW
-
-                console.print(f"Pulling {len(observations)} observation(s) to {cfg.archive_root}")
-                failed: list[str] = []
-                tmp_root = cfg.archive_root / "_incoming"
-                for i, obs in enumerate(observations, 1):
-                    zip_path = tmp_root / f"{obs.id_short}.zip"
-                    label = f"[{i}/{len(observations)}] {obs.target}"
-                    try:
-                        last = ""
-                        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-                        tick = 0
-                        on_progress_line = False
-                        async for ev in transfer_pull(client, obs, zip_path, fmt=cfg.format):
-                            if ev.phase == "downloading":
-                                tick += 1
-                                # ljust pads over any longer previous line so it
-                                # doesn't leave residue (the "donewnloading" bug).
-                                line = f"  {label}: {spin[tick % len(spin)]} {_build_status(ev)}"
-                                console.print(line.ljust(72), end="\r", highlight=False)
-                                on_progress_line = True
-                            elif ev.phase != last:
-                                if on_progress_line:
-                                    console.print()  # finalize the in-place line
-                                    on_progress_line = False
-                                console.print(f"  {label}: {ev.phase}")
-                            last = ev.phase
-                        if on_progress_line:
-                            console.print()
-                        res = ingest_zip(zip_path, obs, cfg, m)
-                        unlink_retry(zip_path)
-                        console.print(
-                            f"  {label}: [green]ingested[/] "
-                            f"{res.light_count} frames, {res.fits_written} FITS"
-                        )
-                    except TransferError as e:
-                        err_console.print(f"  {label}: [red]failed[/] — {e}")
-                        failed.append(obs.target)
-                        unlink_retry(zip_path)
-
-                if failed:
-                    err_console.print(
-                        f"[yellow]{len(failed)} failed (retry next run): {', '.join(failed)}[/]"
-                    )
-                    return EXIT_PARTIAL
-                return EXIT_OK
-
-    raise typer.Exit(asyncio.run(go()))
+    root = Path(dest).expanduser() if dest else sc.archive_root()
+    root.mkdir(parents=True, exist_ok=True)
+    res = sc.pull(found.handle, root, log, target)
+    raise typer.Exit(res.code)
 
 
 if __name__ == "__main__":
