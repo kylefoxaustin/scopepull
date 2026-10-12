@@ -1,7 +1,7 @@
 [project]
 name = "scopepull"
 version = "0.1.1"
-description = "One-shot stack puller for Unistellar Odyssey Pro telescopes"
+description = "Gets the night off your smart scope: Unistellar Odyssey Pro, ZWO Seestar"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Kyle Fox Austin" }]
@@ -32,6 +32,8 @@ Repository = "https://github.com/kylefoxaustin/scopepull"
 
 [project.scripts]
 scopepull = "scopepull.cli:app"
+# The owl. Stdlib tkinter only, so no extra dependency buys it.
+scopepull-gui = "scopepull.gui:main"
 
 [project.optional-dependencies]
 tui = ["textual>=0.60"]
@@ -52,6 +54,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scopepull"]
+# The owl's faces and icons travel with the package (and into the exe).
+artifacts = ["src/scopepull/assets/**"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -66,10 +70,22 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH"]
 
+[tool.ruff.lint.per-file-ignores]
+# The window, lifted from starstack: os.path throughout (PTH), broad excepts
+# around every optional dependency and every tk call that may not exist on a
+# given box (B), and tkinter's own idioms (SIM). Rewriting it to this repo's
+# house style would mean re-debugging it.
+"src/scopepull/gui.py" = ["PTH", "B", "SIM", "E501"]
+
 [tool.mypy]
 python_version = "3.12"  # numpy's bundled stubs use 3.12 `type` statements
 strict = true
 files = ["src"]
+# gui.py is a tkinter window lifted wholesale from starstack (see its header).
+# Annotating 1,100 lines of widget code would churn every line of a file whose
+# value is that it has already been debugged in front of users; tkinter's own
+# stubs make strict mode noisy for no safety. The CLI underneath it is typed.
+exclude = ['src/scopepull/gui\.py$']
 
 [[tool.mypy.overrides]]
 # Scientific libs ship without type stubs / py.typed markers.

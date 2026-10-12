@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- Grumpy Owl — original mascot for starstack. -->
+  <defs>
+    <radialGradient id="body" cx="50%" cy="40%" r="65%">
+      <stop offset="0" stop-color="#e2a95a"/>
+      <stop offset="1" stop-color="#b9772f"/>
+    </radialGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6dfb5"/>
+      <stop offset="1" stop-color="#e5c087"/>
+    </linearGradient>
+    <linearGradient id="beanie" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f4f7a"/>
+      <stop offset="1" stop-color="#1e3556"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ear tufts -->
+  <path d="M118 126 L96 52 L160 100 Z" fill="#a6692a"/>
+  <path d="M282 126 L304 52 L240 100 Z" fill="#a6692a"/>
+
+  <!-- body -->
+  <ellipse cx="200" cy="232" rx="126" ry="140" fill="url(#body)"/>
+  <!-- belly -->
+  <ellipse cx="200" cy="270" rx="78" ry="86" fill="url(#belly)"/>
+  <!-- belly feather marks -->
+  <g fill="none" stroke="#d6a86a" stroke-width="4" stroke-linecap="round" opacity="0.8">
+    <path d="M170 250 q10 12 20 0"/><path d="M200 250 q10 12 20 0"/>
+    <path d="M155 278 q10 12 20 0"/><path d="M185 278 q10 12 20 0"/><path d="M215 278 q10 12 20 0"/>
+    <path d="M170 306 q10 12 20 0"/><path d="M200 306 q10 12 20 0"/>
+  </g>
+
+  <!-- wings -->
+  <path d="M78 210 q-28 70 22 130 q10-60 26-100 Z" fill="#a6692a"/>
+  <path d="M322 210 q28 70-22 130 q-10-60-26-100 Z" fill="#a6692a"/>
+
+  <!-- face disc -->
+  <ellipse cx="200" cy="170" rx="104" ry="80" fill="#f0cf96"/>
+
+  <!-- eyes -->
+  <circle cx="158" cy="172" r="40" fill="#fff8ea"/>
+  <circle cx="242" cy="172" r="40" fill="#fff8ea"/>
+  <!-- heavy-lidded: upper lids cut the eyes -->
+  <path d="M118 158 q40-22 80 0 L198 132 L118 132 Z" fill="#f0cf96"/>
+  <path d="M202 158 q40-22 80 0 L282 132 L202 132 Z" fill="#f0cf96"/>
+  <circle cx="163" cy="180" r="19" fill="#1b1f2a"/>
+  <circle cx="237" cy="180" r="19" fill="#1b1f2a"/>
+  <circle cx="170" cy="173" r="5" fill="#ffffff"/>
+  <circle cx="244" cy="173" r="5" fill="#ffffff"/>
+
+  <!-- the brows: this is where the grumpy lives -->
+  <path d="M110 140 L196 166" stroke="#5a3a14" stroke-width="15" stroke-linecap="round"/>
+  <path d="M290 140 L204 166" stroke="#5a3a14" stroke-width="15" stroke-linecap="round"/>
+
+  <!-- beak, slightly downturned -->
+  <path d="M186 196 L214 196 L200 224 Z" fill="#e8892e"/>
+  <path d="M186 196 L214 196 L200 206 Z" fill="#f4a24a"/>
+
+  <!-- beanie -->
+  <path d="M96 106 q104-96 208 0 L304 128 q-104-40-208 0 Z" fill="url(#beanie)"/>
+  <rect x="88" y="104" width="224" height="30" rx="14" fill="#3a5f8f"/>
+  <g stroke="#2a4468" stroke-width="3" opacity="0.7">
+    <path d="M110 108 v22"/><path d="M130 106 v26"/><path d="M150 105 v28"/><path d="M170 104 v29"/>
+    <path d="M190 104 v29"/><path d="M210 104 v29"/><path d="M230 104 v29"/><path d="M250 105 v28"/>
+    <path d="M270 106 v26"/><path d="M290 108 v22"/>
+  </g>
+  <circle cx="200" cy="36" r="20" fill="#e5e9f0"/>
+  <circle cx="200" cy="36" r="20" fill="none" stroke="#c6ccd6" stroke-width="3" stroke-dasharray="5 4"/>
+
+  <!-- feet -->
+  <path d="M158 366 q10 14 22 0 q6 14 18 0" fill="none" stroke="#e8892e" stroke-width="9" stroke-linecap="round"/>
+  <path d="M202 366 q10 14 22 0 q6 14 18 0" fill="none" stroke="#e8892e" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- thermos, tucked under the right wing -->
+  <g transform="translate(300 268) rotate(14)">
+    <rect x="-20" y="-78" width="40" height="16" rx="5" fill="#3b3f46"/>          <!-- cup lid -->
+    <rect x="-14" y="-64" width="28" height="10" fill="#6b7078"/>                 <!-- neck -->
+    <rect x="-22" y="-56" width="44" height="120" rx="9" fill="#c9432e"/>         <!-- body -->
+    <rect x="-22" y="-56" width="44" height="14" rx="6" fill="#a9b0ba"/>          <!-- steel band -->
+    <rect x="-22" y="52" width="44" height="12" rx="6" fill="#a9b0ba"/>
+    <rect x="-14" y="-24" width="28" height="44" rx="4" fill="#f2e6cf"/>          <!-- label -->
+    <path d="M-7 -12 h14 M-7 -4 h10 M-7 4 h14 M-7 12 h8" stroke="#c9432e" stroke-width="3" stroke-linecap="round"/>
+    <rect x="-18" y="-42" width="6" height="88" rx="3" fill="#ffffff" opacity="0.18"/> <!-- sheen -->
+  </g>
+</svg>

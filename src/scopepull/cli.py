@@ -235,12 +235,33 @@ def _report(label: str, good: bool, detail: str) -> None:
 
 
 @app.command()
-def status() -> None:
+def status(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Roots and totals only, for the window (no disk walk)"),
+    ] = False,
+) -> None:
     """Local archive summary, per scope."""
     cfg = Config.load()
     with Manifest() as m:
         n, total = m.totals()
         rows = m.all_observations()
+    if as_json:
+        # Deliberately does NOT index the archives: this is what the window
+        # asks at start-up, and it has to come back instantly. Session counts
+        # come from `index`, per scope, when the table is filled.
+        print(
+            _json.dumps(
+                {
+                    "version": __version__,
+                    "roots": {name: str(cfg.root_for(name)) for name in SCOPE_NAMES},
+                    "observations": n,
+                    "bytes": total,
+                    "scopes": {name: LABELS[name] for name in SCOPE_NAMES},
+                }
+            )
+        )
+        return
     # starstack parses this exact line to honour archive_root — docs/STARSTACK.md.
     # It has to stay the first line, and it is the Odyssey's root.
     console.print(f"Archive root: {cfg.archive_root}")
@@ -254,6 +275,23 @@ def status() -> None:
         console.print(f"[bold]{LABELS[name]}[/]")
         console.print(f"  {root}")
         console.print(f"  {summarize(archive_index(root, scope=name))}")
+
+
+@app.command()
+def gui() -> None:
+    """Open the owl: one window, one big red button (also `scopepull-gui`)."""
+    # Imported here, not at the top: tkinter is missing on some minimal Linux
+    # installs, and a headless box should still be able to run every other
+    # command without it.
+    try:
+        from .gui import main as gui_main
+    except ImportError as e:  # pragma: no cover - depends on the OS's tk
+        err_console.print(
+            f"[red]can't open the window:[/] {e}\n"
+            "On Linux, tkinter is a separate package (apt install python3-tk)."
+        )
+        raise typer.Exit(EXIT_ERROR) from None
+    gui_main()  # type: ignore[no-untyped-call]  # gui.py is mypy-excluded
 
 
 @app.command()
