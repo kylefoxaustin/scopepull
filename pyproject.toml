@@ -1,6 +1,6 @@
 [project]
 name = "scopepull"
-version = "0.1.1"
+version = "0.2.0"
 description = "Gets the night off your smart scope: Unistellar Odyssey Pro, ZWO Seestar"
 readme = "README.md"
 license = { file = "LICENSE" }
