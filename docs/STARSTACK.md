@@ -164,3 +164,61 @@ Things the starstack side would like to hear about:
 - any new or repurposed exit code from `pull`
 - any change to the `Archive root:` line in `status`
 - a PyPI release (so the README's install line can be shortened)
+
+---
+
+## What changed on this side (scopepull 0.2.0, October 2026)
+
+Written back for the starstack session, in the four categories that doc asked
+to hear about, plus the one that changes what starstack *is*.
+
+**The owl moved in.** `button.py` is now `src/scopepull/gui.py` here, and it is
+scopepull's face: it shells out to `python -m scopepull` (or `scopepull.exe
+--cli`) for every pull, index and combine. starstack is now the **optional
+quick-look stacker** the window looks for with `shutil.which("starstack")` and
+probes with `starstack --version`; without it the owl is purely a puller and
+says so, and its "Install starstack…" button does `pip install
+git+https://github.com/kylefoxaustin/starstack`. The exit-code table that used
+to live in `run_scopepull_pull` is now `App.PULL_VERDICT` in gui.py, with the
+same meanings.
+
+So the ask from this side: starstack's README wants the banner the plan doc
+describes — *the owl lives at scopepull now; this is the quick-look stacker he
+calls* — and `starstack-button` probably wants retiring rather than maintaining
+two windows.
+
+**Archive layout: unchanged for the Odyssey.** `frames/`, `calibration/`,
+`reference/`, `observation.json`, `scope_manifest`, the `.partial` suffix — all
+exactly where they were. `test_scopepull_archive_layout` should still pass
+untouched.
+
+What's new is a *second* archive root: `~/Astro/seestar/<night>/<target>/`,
+holding the Seestar's own `.fit` subs. That is the night-of-targets shape
+`find_sessions` already walks, so starstack pointed at it should work as-is.
+Roots are configurable per scope now (`[archive_roots]` in config.toml,
+defaulting to `~/Astro/<scope>`).
+
+**Exit codes: unchanged, and now a cross-scope contract.** 0 / 2 / 3 / 4 / 5
+mean what they meant; every scope keeps them (a Seestar that can't be found
+exits 3, like an Odyssey that doesn't answer). Nothing was added or repurposed.
+
+**The `Archive root:` line: unchanged, and still the first line of `status`.**
+It is still the Odyssey's root, which is what `starstack --pull` wants. Below
+it there is now a per-scope block, and `scopepull status --json` gives
+`{"roots": {...}, "observations": n, ...}` without walking the archives — use
+that instead of parsing prose if it's ever easier.
+
+**PyPI: yes, now.** 0.2.0 publishes on the tag, so starstack's README install
+line can go back to `uv tool install scopepull` (the `git+` form keeps working).
+
+**New commands starstack might want**, all machine-readable:
+
+    scopepull index [--scope NAME] [--all-scopes] [--root DIR]   JSON lines, one session each
+    scopepull combine TARGET [--nights A,B] [--root DIR]         hard-links nights into combined/
+    scopepull find --scope NAME [--at SPEC]                      where is that scope (exit 0 or 3)
+
+`index` is `archive_index` with the same keys starstack's own version had
+(night, target, folder, frames, exposure_s, integration_s, pulled_at, stacked,
+mosaic) plus `scope`. If starstack keeps its own copies of `archive_index` and
+`combine_target`, they're now duplicated in two repos — this side considers
+scopepull's the one that moves.
