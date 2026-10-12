@@ -1,11 +1,19 @@
 name: release
 
-# Tag a version (e.g. v0.1.0, matching pyproject) and this builds the wheel +
-# sdist, publishes them to PyPI via Trusted Publishing (OIDC — no stored token),
-# and attaches them to a GitHub Release.
+# Tag a version (e.g. v0.2.0, matching pyproject) and this builds three things
+# and puts them in one GitHub Release:
+#
+#   * the wheel + sdist, published to PyPI via Trusted Publishing (OIDC, no
+#     stored token) for `uv tool install scopepull`;
+#   * scopepull.exe for Windows, for people who don't have Python at all;
+#   * SHA256SUMS.txt, because the exe isn't code-signed (certificates cost
+#     money; this is a hobby) and the README tells people to check the hash.
 on:
   push:
     tags: ["v*"]
+
+env:
+  PYINSTALLER_VERSION: "6.22.3"
 
 jobs:
   build:
@@ -18,6 +26,81 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  # Windows Defender and PyInstaller: a one-file, windowed PyInstaller exe is
+  # launched by a small "bootloader" program that every PyInstaller app on the
+  # planet shares, byte for byte. When any one of those apps is malware,
+  # Defender's heuristics (Wacatac / Wacapew / anything "!ml") flag them all --
+  # which is what happened to starstack v0.2.5 and v0.2.6. So this job compiles
+  # that bootloader itself, here, from PyInstaller's source: a hash nobody has
+  # ever shipped. It refuses to build if it somehow ended up with the stock one.
+  # (pip's --no-binary does NOT do this: PyInstaller's sdist ships prebuilt
+  # bootloaders. You have to run its waf build.)
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install .
+
+      # MSVC on PATH for waf
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build PyInstaller with a bootloader compiled here
+        shell: pwsh
+        run: |
+          git clone --quiet --depth 1 --branch "v$env:PYINSTALLER_VERSION" https://github.com/pyinstaller/pyinstaller.git pyi-src
+          # throw away the shipped bootloaders so a failed compile can't fall back to them
+          Remove-Item -Recurse -Force pyi-src\PyInstaller\bootloader\Windows-64bit-intel
+          Push-Location pyi-src\bootloader
+          python .\waf all
+          Pop-Location
+          pip install --no-cache-dir .\pyi-src
+
+      - name: Prove the bootloader is ours
+        shell: pwsh
+        run: |
+          # sha256 of runw.exe inside the official 6.22.3 win_amd64 wheel
+          $stock = "2291f269c3a3804f"
+          $p = python -c "import PyInstaller,pathlib; print(pathlib.Path(PyInstaller.__file__).parent/'bootloader'/'Windows-64bit-intel'/'runw.exe')"
+          $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
+          Write-Host "bootloader runw.exe sha256: $h"
+          if ($h.StartsWith($stock)) { throw "bootloader is the stock wheel one -- the compile did not take" }
+
+      - run: python make_version_info.py
+      - run: pyinstaller --noconfirm --clean scopepull.spec
+
+      # The built exe must actually pull before it is released. A frozen build
+      # breaks in ways no unit test sees -- starstack shipped nine releases with
+      # `import astropy` broken inside the exe, every FITS silently unreadable.
+      - name: Smoke-test the exe against a synthetic scope
+        run: python smoke_frozen.py dist\scopepull.exe
+
+      # The checksum goes where a person can see it: SHA256SUMS.txt next to the
+      # exe, and the hash in the release notes. `Get-FileHash` in PowerShell on
+      # the downloaded file should print the same thing.
+      - name: Name it, hash it, write the notes
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}"
+          $exe = "scopepull-$v-windows.exe"
+          Copy-Item dist\scopepull.exe "dist\$exe"
+          $h = (Get-FileHash "dist\$exe" -Algorithm SHA256).Hash.ToLower()
+          "$h  $exe" | Out-File -Encoding ascii dist\SHA256SUMS.txt
+          "**SHA256** of ``$exe``: ``$h``  (PowerShell: ``Get-FileHash $exe``)`n" | Out-File -Encoding utf8 dist\notes.md
+          Write-Host "sha256: $h"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            dist/scopepull-*-windows.exe
+            dist/SHA256SUMS.txt
+            dist/notes.md
 
   pypi-publish:
     needs: build
@@ -35,7 +118,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: build
+    needs: [build, windows-exe]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -44,7 +127,15 @@ jobs:
         with:
           name: dist
           path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: exe/
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*
+            exe/scopepull-*-windows.exe
+            exe/SHA256SUMS.txt
+          body_path: exe/notes.md
           generate_release_notes: true
