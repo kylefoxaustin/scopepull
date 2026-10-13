@@ -1,0 +1,11 @@
+{
+  "server": "nginx/1.22.1",
+  "date": "Thu, 03 Sep 2026 00:47:04 GMT",
+  "content-type": "text/html",
+  "last-modified": "Fri, 20 Mar 2026 14:54:17 GMT",
+  "transfer-encoding": "chunked",
+  "connection": "keep-alive",
+  "etag": "W/\"69bd5f99-1bc\"",
+  "content-encoding": "gzip",
+  "encoding": "utf-8"
+}

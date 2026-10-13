@@ -1,0 +1,2 @@
+200 in 0.00s
+{ "cmd": "obslist", "status": "updated", "disk": { "total": 56405539840, "avail": 20921344 } }

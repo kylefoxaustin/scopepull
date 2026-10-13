@@ -20,3 +20,8 @@ unistellar_data/
 *.fits
 *.zip
 !tests/fixtures/*.zip
+# NEVER the live capture zips: the scope puts the observing site's GPS (to 11
+# decimal places) and its serial number in every manifest.json inside them.
+# The .json/.log captures next to them are committed with sn/lat/long/alt
+# scrubbed, the same way tests/fixtures/observations_list_odyssey_fw42.json is.
+tests/fixtures/live/*.zip
