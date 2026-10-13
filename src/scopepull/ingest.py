@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import shutil
 import zipfile
 from dataclasses import dataclass
@@ -144,6 +145,17 @@ def _bayer_pattern(manifest: dict[str, Any], sample: np.ndarray | None = None) -
     return _ROW_FLIP.get(sensor) if sensor else None
 
 
+def _num(v: object) -> float | None:
+    """A finite number from the manifest, or None. The Odyssey writes NaN for
+    ra/dec on an observation it never plate-solved (an aborted 14 MB Western
+    Veil, live), and FITS headers cannot hold NaN -- astropy raises, and one
+    bad manifest took a whole six-observation pull down. bool is excluded on
+    purpose (it is an int in Python)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return float(v) if math.isfinite(v) else None
+
+
 def _write_fits(
     tiff_path: Path, fits_path: Path, manifest: dict[str, Any], bayer: str | None
 ) -> None:
@@ -161,18 +173,18 @@ def _write_fits(
     h["OBJECT"] = str(manifest.get("nameTarget", ""))[:68]
     h["INSTRUME"] = str(manifest.get("sensor", ""))[:68]
     h["TELESCOP"] = "Unistellar Odyssey"
-    expo = manifest.get("expo")
-    if isinstance(expo, (int, float)):
+    expo = _num(manifest.get("expo"))
+    if expo is not None:
         h["EXPTIME"] = (expo / 1_000_000.0, "seconds (from manifest expo, us)")
-    gain = manifest.get("gain")
-    if isinstance(gain, (int, float)):
+    gain = _num(manifest.get("gain"))
+    if gain is not None:
         h["GAIN"] = gain
     for key, mk in (("RA", "ra"), ("DEC", "dec")):
-        v = manifest.get(mk)
-        if isinstance(v, (int, float)):
+        v = _num(manifest.get(mk))
+        if v is not None:
             h[key] = (v, "degrees")
-    depth = manifest.get("depth")
-    if isinstance(depth, (int, float)):
+    depth = _num(manifest.get("depth"))
+    if depth is not None:
         h["ADCBITS"] = (int(depth), "sensor ADC bit depth")
     if bayer:
         h["BAYERPAT"] = (bayer, "CFA pattern as stored (measured from pixels)")
@@ -181,8 +193,8 @@ def _write_fits(
         sensor = _sensor_bayer_pattern(manifest)
         if sensor and sensor != bayer:
             h["SENSPAT"] = (sensor, "CFA pattern of the sensor per scope manifest")
-    obs_start = manifest.get("obs_start")
-    if isinstance(obs_start, (int, float)) and obs_start > 0:
+    obs_start = _num(manifest.get("obs_start"))
+    if obs_start is not None and obs_start > 0:
         h["DATE-OBS"] = datetime.fromtimestamp(obs_start / 1000, tz=UTC).isoformat()
     hdu.writeto(fits_path, overwrite=True)
 
