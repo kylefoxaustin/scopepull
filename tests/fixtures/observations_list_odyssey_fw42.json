@@ -2,7 +2,7 @@
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "56c8658e-ff2d-11f0-a180-d83add57d7a8",
+  "obsId": "56c8658e-ff2d-11f0-a180-000000000000",
   "uid_target": 811286,
   "softv": "4.2",
   "softh": "1f029092",
@@ -38,14 +38,14 @@
    "frames_to_upload": 1796
   },
   "name": "20260201T051744_407",
-  "uuid": "56c8658e-ff2d-11f0-a180-d83add57d7a8",
+  "uuid": "56c8658e-ff2d-11f0-a180-000000000000",
   "nb_frames": 1796,
-  "vpath": "prod/56c8658e-ff2d-11f0-a180-d83add57d7a8"
+  "vpath": "prod/56c8658e-ff2d-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "dd5c607a-eb8f-11f0-972e-d83add57d7a8",
+  "obsId": "dd5c607a-eb8f-11f0-972e-000000000000",
   "uid_target": 811286,
   "softv": "4.2",
   "softh": "1f029092",
@@ -80,14 +80,14 @@
    "frames_to_upload": 5
   },
   "name": "20260107T061237_585",
-  "uuid": "dd5c607a-eb8f-11f0-972e-d83add57d7a8",
+  "uuid": "dd5c607a-eb8f-11f0-972e-000000000000",
   "nb_frames": 5,
-  "vpath": "prod/dd5c607a-eb8f-11f0-972e-d83add57d7a8"
+  "vpath": "prod/dd5c607a-eb8f-11f0-972e-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "ab41387c-ffdf-11f0-800a-d83add57d7a8",
+  "obsId": "ab41387c-ffdf-11f0-800a-000000000000",
   "uid_target": 811224,
   "softv": "4.2",
   "softh": "1f029092",
@@ -121,14 +121,14 @@
    "frames_to_upload": 2
   },
   "name": "20260202T023416_000",
-  "uuid": "ab41387c-ffdf-11f0-800a-d83add57d7a8",
+  "uuid": "ab41387c-ffdf-11f0-800a-000000000000",
   "nb_frames": 2,
-  "vpath": "prod/ab41387c-ffdf-11f0-800a-d83add57d7a8"
+  "vpath": "prod/ab41387c-ffdf-11f0-800a-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "b3fc9484-eb8f-11f0-972e-d83add57d7a8",
+  "obsId": "b3fc9484-eb8f-11f0-972e-000000000000",
   "uid_target": 811340,
   "softv": "4.2",
   "softh": "1f029092",
@@ -165,14 +165,14 @@
    "frames_to_upload": 8
   },
   "name": "20260107T061128_173",
-  "uuid": "b3fc9484-eb8f-11f0-972e-d83add57d7a8",
+  "uuid": "b3fc9484-eb8f-11f0-972e-000000000000",
   "nb_frames": 8,
-  "vpath": "prod/b3fc9484-eb8f-11f0-972e-d83add57d7a8"
+  "vpath": "prod/b3fc9484-eb8f-11f0-972e-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "13539b90-eb80-11f0-972e-d83add57d7a8",
+  "obsId": "13539b90-eb80-11f0-972e-000000000000",
   "uid_target": 811277,
   "softv": "4.2",
   "softh": "1f029092",
@@ -209,14 +209,14 @@
    "frames_to_upload": 1206
   },
   "name": "20260107T041936_193",
-  "uuid": "13539b90-eb80-11f0-972e-d83add57d7a8",
+  "uuid": "13539b90-eb80-11f0-972e-000000000000",
   "nb_frames": 1206,
-  "vpath": "prod/13539b90-eb80-11f0-972e-d83add57d7a8"
+  "vpath": "prod/13539b90-eb80-11f0-972e-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "dd95dd5e-ff2c-11f0-a180-d83add57d7a8",
+  "obsId": "dd95dd5e-ff2c-11f0-a180-000000000000",
   "uid_target": 811301,
   "softv": "4.2",
   "softh": "1f029092",
@@ -253,14 +253,14 @@
    "frames_to_upload": 14
   },
   "name": "20260201T051421_065",
-  "uuid": "dd95dd5e-ff2c-11f0-a180-d83add57d7a8",
+  "uuid": "dd95dd5e-ff2c-11f0-a180-000000000000",
   "nb_frames": 14,
-  "vpath": "prod/dd95dd5e-ff2c-11f0-a180-d83add57d7a8"
+  "vpath": "prod/dd95dd5e-ff2c-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "3cf7383e-ff27-11f0-a180-d83add57d7a8",
+  "obsId": "3cf7383e-ff27-11f0-a180-000000000000",
   "uid_target": 811317,
   "softv": "4.2",
   "softh": "1f029092",
@@ -297,14 +297,14 @@
    "frames_to_upload": 368
   },
   "name": "20260201T043404_112",
-  "uuid": "3cf7383e-ff27-11f0-a180-d83add57d7a8",
+  "uuid": "3cf7383e-ff27-11f0-a180-000000000000",
   "nb_frames": 368,
-  "vpath": "prod/3cf7383e-ff27-11f0-a180-d83add57d7a8"
+  "vpath": "prod/3cf7383e-ff27-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "fbe507fa-eb7f-11f0-972e-d83add57d7a8",
+  "obsId": "fbe507fa-eb7f-11f0-972e-000000000000",
   "uid_target": 811277,
   "softv": "4.2",
   "softh": "1f029092",
@@ -341,14 +341,14 @@
    "frames_to_upload": 8
   },
   "name": "20260107T041856_886",
-  "uuid": "fbe507fa-eb7f-11f0-972e-d83add57d7a8",
+  "uuid": "fbe507fa-eb7f-11f0-972e-000000000000",
   "nb_frames": 8,
-  "vpath": "prod/fbe507fa-eb7f-11f0-972e-d83add57d7a8"
+  "vpath": "prod/fbe507fa-eb7f-11f0-972e-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "f1af7224-eb8f-11f0-972e-d83add57d7a8",
+  "obsId": "f1af7224-eb8f-11f0-972e-000000000000",
   "uid_target": 811286,
   "softv": "4.2",
   "softh": "1f029092",
@@ -383,14 +383,14 @@
    "frames_to_upload": 4
   },
   "name": "20260107T061311_713",
-  "uuid": "f1af7224-eb8f-11f0-972e-d83add57d7a8",
+  "uuid": "f1af7224-eb8f-11f0-972e-000000000000",
   "nb_frames": 4,
-  "vpath": "prod/f1af7224-eb8f-11f0-972e-d83add57d7a8"
+  "vpath": "prod/f1af7224-eb8f-11f0-972e-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "4d37a86c-ff1f-11f0-a180-d83add57d7a8",
+  "obsId": "4d37a86c-ff1f-11f0-a180-000000000000",
   "uid_target": 811316,
   "softv": "4.2",
   "softh": "1f029092",
@@ -427,14 +427,14 @@
    "frames_to_upload": 714
   },
   "name": "20260201T033715_387",
-  "uuid": "4d37a86c-ff1f-11f0-a180-d83add57d7a8",
+  "uuid": "4d37a86c-ff1f-11f0-a180-000000000000",
   "nb_frames": 714,
-  "vpath": "prod/4d37a86c-ff1f-11f0-a180-d83add57d7a8"
+  "vpath": "prod/4d37a86c-ff1f-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "fd293da4-ff19-11f0-a180-d83add57d7a8",
+  "obsId": "fd293da4-ff19-11f0-a180-000000000000",
   "uid_target": 812705,
   "softv": "4.2",
   "softh": "1f029092",
@@ -471,14 +471,14 @@
    "frames_to_upload": 120
   },
   "name": "20260201T025913_606",
-  "uuid": "fd293da4-ff19-11f0-a180-d83add57d7a8",
+  "uuid": "fd293da4-ff19-11f0-a180-000000000000",
   "nb_frames": 120,
-  "vpath": "prod/fd293da4-ff19-11f0-a180-d83add57d7a8"
+  "vpath": "prod/fd293da4-ff19-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "fd80f734-ff1d-11f0-a180-d83add57d7a8",
+  "obsId": "fd80f734-ff1d-11f0-a180-000000000000",
   "uid_target": 811267,
   "softv": "4.2",
   "softh": "1f029092",
@@ -515,14 +515,14 @@
    "frames_to_upload": 90
   },
   "name": "20260201T032752_140",
-  "uuid": "fd80f734-ff1d-11f0-a180-d83add57d7a8",
+  "uuid": "fd80f734-ff1d-11f0-a180-000000000000",
   "nb_frames": 90,
-  "vpath": "prod/fd80f734-ff1d-11f0-a180-d83add57d7a8"
+  "vpath": "prod/fd80f734-ff1d-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "eb5a8b44-ff2a-11f0-a180-d83add57d7a8",
+  "obsId": "eb5a8b44-ff2a-11f0-a180-000000000000",
   "uid_target": 811336,
   "softv": "4.2",
   "softh": "1f029092",
@@ -559,14 +559,14 @@
    "frames_to_upload": 6
   },
   "name": "20260201T050025_166",
-  "uuid": "eb5a8b44-ff2a-11f0-a180-d83add57d7a8",
+  "uuid": "eb5a8b44-ff2a-11f0-a180-000000000000",
   "nb_frames": 6,
-  "vpath": "prod/eb5a8b44-ff2a-11f0-a180-d83add57d7a8"
+  "vpath": "prod/eb5a8b44-ff2a-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "96b7d36a-ff09-11f0-a180-d83add57d7a8",
+  "obsId": "96b7d36a-ff09-11f0-a180-000000000000",
   "uid_target": 811316,
   "softv": "4.2",
   "softh": "1f029092",
@@ -603,14 +603,14 @@
    "frames_to_upload": 13
   },
   "name": "20260201T010149_760",
-  "uuid": "96b7d36a-ff09-11f0-a180-d83add57d7a8",
+  "uuid": "96b7d36a-ff09-11f0-a180-000000000000",
   "nb_frames": 13,
-  "vpath": "prod/96b7d36a-ff09-11f0-a180-d83add57d7a8"
+  "vpath": "prod/96b7d36a-ff09-11f0-a180-000000000000"
  },
  {
   "sn": "SCRUBBED",
   "pn": "E2A01",
-  "obsId": "056808fc-ff0a-11f0-a180-d83add57d7a8",
+  "obsId": "056808fc-ff0a-11f0-a180-000000000000",
   "uid_target": 811705,
   "softv": "4.2",
   "softh": "1f029092",
@@ -647,8 +647,8 @@
    "frames_to_upload": 1525
   },
   "name": "20260201T010455_486",
-  "uuid": "056808fc-ff0a-11f0-a180-d83add57d7a8",
+  "uuid": "056808fc-ff0a-11f0-a180-000000000000",
   "nb_frames": 1525,
-  "vpath": "prod/056808fc-ff0a-11f0-a180-d83add57d7a8"
+  "vpath": "prod/056808fc-ff0a-11f0-a180-000000000000"
  }
 ]

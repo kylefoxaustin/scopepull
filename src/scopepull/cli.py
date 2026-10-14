@@ -55,6 +55,10 @@ app = typer.Typer(
     help="Gets the night off your smart scope: Unistellar Odyssey Pro, ZWO Seestar.",
     no_args_is_help=False,
     add_completion=False,
+    # Typer's rich traceback would otherwise swallow usage errors before run()
+    # can map them to an exit code, and a boxed traceback is the wrong thing to
+    # print at a caller that parses our output anyway.
+    pretty_exceptions_enable=False,
 )
 console = Console()
 err_console = Console(stderr=True)
@@ -264,7 +268,7 @@ def status(
         return
     # starstack parses this exact line to honour archive_root — docs/STARSTACK.md.
     # It has to stay the first line, and it is the Odyssey's root.
-    console.print(f"Archive root: {cfg.archive_root}")
+    console.print(f"Archive root: {cfg.archive_root}", soft_wrap=True)
     console.print(f"{n} observation(s) archived, {total / 2**30:.2f} GiB")
     if rows:
         last = rows[-1]
@@ -417,12 +421,13 @@ def _run_pull(
 ) -> None:
     cfg = _load_config(ip)
     name = _scope_or_exit(scope)
-    if name != "odyssey" and (since or fmt):
+    if name != "odyssey" and (since or fmt or not new):
         # Say so rather than silently ignoring them: a Seestar pull is a file
-        # copy, dated by filename and already in FITS, so there is nothing for
-        # --since or --format to do yet.
+        # copy, dated by filename and already in FITS, and it dedupes against
+        # the archive itself, so there is nothing for --all, --since or
+        # --format to do yet.
         err_console.print(
-            f"[yellow]--since/--format don't apply to the {LABELS[name]} — ignoring them.[/]"
+            f"[yellow]--all/--since/--format don't apply to the {LABELS[name]} — ignoring them.[/]"
         )
     sc = get_scope(name, cfg, new=new, since=since, fmt=fmt)
     log = _console_log()
@@ -439,5 +444,44 @@ def _run_pull(
     raise typer.Exit(res.code)
 
 
+def run() -> None:
+    """Console-script entry point, and the only place that maps an exception to
+    an exit code.
+
+    Click exits 2 on any usage error, and 2 is load-bearing in our own contract
+    -- it means "nothing new on the scope, the archive is worth stacking"
+    (docs/STARSTACK.md). So a mistyped flag, or a flag a newer caller passes to
+    an older scopepull, used to tell starstack and the window to go ahead and
+    stack on top of a pull that never ran. Usage errors exit 1 instead.
+
+    The exceptions are matched by shape, not by class: typer vendors its own
+    fork of click, so `click.UsageError` is not the class raised here, and
+    which one it is has changed between typer versions.
+    """
+    try:
+        # Not standalone: click RETURNS the exit code of a typer.Exit here
+        # instead of raising it, so the return value is the contract code and
+        # dropping it silently turns every "unreachable" into a success.
+        rv = app(standalone_mode=False)
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        raise SystemExit(130) from None
+    except BaseException as e:
+        # A UsageError carries BOTH `show` and an exit_code of 2, so it has to
+        # be tested first -- testing exit_code first is exactly the bug this
+        # function exists to prevent.
+        if callable(getattr(e, "show", None)):  # a UsageError, whoever's click it is
+            e.show()  # type: ignore[attr-defined]
+            raise SystemExit(EXIT_ERROR) from None
+        code = getattr(e, "exit_code", None)
+        if code is not None:  # typer.Exit / click's Exit: --help, --version, our own
+            raise SystemExit(code) from None
+        if type(e).__name__ == "Abort":
+            raise SystemExit(130) from None
+        raise
+    raise SystemExit(rv if isinstance(rv, int) else EXIT_OK)
+
+
 if __name__ == "__main__":
-    app()
+    run()

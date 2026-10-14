@@ -35,7 +35,12 @@ IMAGE_EXT = FITS_EXT | TIFF_EXT | {".png", ".jpg", ".jpeg"}
 # Folders under the root that are output or scratch, never a night.
 ARCHIVE_SKIP = {"stacks", "combined", "_incoming"}
 # Frames that aren't subs: the scope's own stack, previews, thumbnails, darks.
-EXTRA_WORDS = ("preview", "thumb", "_thn", "stacksum", "stacked", "master", "final")
+# Anchored, not loose substrings. A Seestar puts the target name in every
+# filename (Light_<target>_10.0s_...), so matching "final" or "stacked"
+# anywhere would make a target called "M31 final" or "Master Ring" disappear
+# from `index` and `combine` with no explanation.
+EXTRA_PREFIXES = ("stacked_", "preview", "thumb", "master", "final_")
+EXTRA_MARKERS = ("_thn.", "stacksum", "darkframemean")
 # Where an observation keeps its lights, when it keeps them in a subfolder.
 FRAME_DIRS = ("frames", "lights", "light")
 
@@ -62,6 +67,13 @@ class Session:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def is_extra(name: str) -> bool:
+    """Is this file something other than a sub-frame? The scope's own finished
+    stack, a preview, a thumbnail, a master dark."""
+    low = name.lower()
+    return low.startswith(EXTRA_PREFIXES) or any(m in low for m in EXTRA_MARKERS)
 
 
 def has_images(folder: Path) -> bool:
@@ -131,8 +143,7 @@ def session_frames(folder: Path) -> list[Path]:
     return [
         p
         for p in paths
-        if p.suffix.lower() not in {".jpg", ".jpeg", ".png"}
-        and not any(w in p.name.lower() for w in EXTRA_WORDS)
+        if p.suffix.lower() not in {".jpg", ".jpeg", ".png"} and not is_extra(p.name)
     ]
 
 

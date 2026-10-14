@@ -117,3 +117,13 @@ def test_scope_object_narrates_and_keeps_its_own_root(tmp_path):
     assert res.code == EXIT_OK
     assert any("5 new subs" in line or "pulled 5 new subs" in line for line in lines)
     assert any("skipped (not a deep-sky stack)" in line for line in lines)
+
+
+def test_a_scope_that_vanishes_is_unreachable_not_a_traceback(tmp_path):
+    """USB unplugged or Wi-Fi dropped between find and pull: MyWorks can't be
+    listed any more. That is exit 3, which the window and starstack understand
+    -- not an OSError escaping as exit 1 ("no explanation the owl recognises")."""
+    lines: list[str] = []
+    res = pull_seestar(tmp_path / "gone" / "MyWorks", tmp_path / "archive", Log(lines.append))
+    assert res.code == EXIT_UNREACHABLE and res.copied == 0
+    assert any("stopped answering" in line for line in lines)

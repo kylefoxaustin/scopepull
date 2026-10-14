@@ -170,7 +170,7 @@ framing mode is real data, and StackingWizard tiles it.
 
 ```bash
 scopepull pull --scope seestar --at D:                       # a USB drive
-scopepull pull --scope seestar --at 10.0.1.215               # by IP, on Wi-Fi
+scopepull pull --scope seestar --at 192.168.1.50               # by IP, on Wi-Fi
 scopepull pull --scope seestar --at '\\seestar\EMMC Images'  # the share itself
 ```
 

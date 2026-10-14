@@ -17,10 +17,10 @@ import sys
 def main() -> None:
     multiprocessing.freeze_support()  # required for worker processes in a frozen exe
     if len(sys.argv) > 1 and sys.argv[1] == "--cli":
-        from scopepull.cli import app
+        from scopepull.cli import run
 
         sys.argv = ["scopepull", *sys.argv[2:]]
-        app()
+        run()
         return
     from scopepull.gui import main as gui_main
 

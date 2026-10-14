@@ -118,3 +118,37 @@ def test_ingest_failure_is_partial_not_fatal(monkeypatch, tmp_path):
     assert "ingest failed" in r.output and "nan" in r.output
     kept = list((tmp_path / "arch" / "_incoming").glob("*.zip"))
     assert len(kept) == 1  # the failed one's zip stays for reuse
+
+
+def test_a_usage_error_is_not_mistaken_for_nothing_new(tmp_path):
+    """Exit 2 means "nothing new on the scope, the archive is worth stacking"
+    (docs/STARSTACK.md). Click exits 2 on any usage error, so a mistyped flag
+    -- or a flag a newer caller passes to an older scopepull -- used to tell
+    starstack and the window to stack on top of a pull that never ran."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+
+    def run(*args):
+        return subprocess.run(
+            [sys.executable, "-m", "scopepull", *args],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=env,
+        )
+
+    bogus = run("pull", "--bogus-flag-nobody-has")
+    assert bogus.returncode == 1, bogus.stdout + bogus.stderr
+    assert "no such option" in (bogus.stdout + bogus.stderr).lower()
+
+    unknown = run("--scope", "seestar")  # an option where a subcommand goes
+    assert unknown.returncode == 1, unknown.stdout + unknown.stderr
+
+    # the real contract codes still come through untouched
+    assert run("--help").returncode == 0
+    assert run("--version").returncode == 0
+    assert run("find", "--scope", "seestar", "--at", str(tmp_path / "nothing")).returncode == 3
+    assert run("combine", "nothing at all", "--root", str(tmp_path)).returncode == 1

@@ -50,7 +50,7 @@ class Found:
 
     `handle` is whatever that scope's `pull` needs (the Odyssey's listing, the
     Seestar's MyWorks folder) and is None when the scope isn't there; `how` is
-    one human sentence either way -- "on Wi-Fi at seestar (10.0.1.215)" or the
+    one human sentence either way -- "on Wi-Fi at seestar (192.168.1.50)" or the
     reason there's nothing to pull from. `code` carries which kind of
     not-there it was, because the exit code is part of the contract.
     """

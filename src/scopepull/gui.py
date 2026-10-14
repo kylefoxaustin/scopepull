@@ -932,7 +932,7 @@ class App(tk.Tk):
         self.out_dir = None
         self._pulled_this_run = False
         self._stacked_this_run = False
-        self._steps = []
+        self._stopping = False
         self._last_rc = 0
         self.settings = load_settings()
         self.roots = {
@@ -2086,8 +2086,11 @@ class App(tk.Tk):
         """Each step in turn, stopping when one says there's nothing worth
         going on for. Reports the last exit code we saw."""
         rc = 0
+        self._stopping = False
         for kind, cmd in steps:
             rc = self._spawn(cmd)
+            if self._stopping:
+                break
             if rc is None:
                 rc = 1
                 break
@@ -2545,7 +2548,10 @@ class App(tk.Tk):
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
-            self._steps = []
+            # Checked by _run between steps. Without it, "Stop" during a pull
+            # only skips the quick look by accident -- because a killed child's
+            # exit code happens to fall outside PULL_VERDICT.
+            self._stopping = True
             kill_tree(self.proc)
             self.paused = False
             self.say("\nstopped. fine.\n", "bad")

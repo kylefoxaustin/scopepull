@@ -139,3 +139,19 @@ def test_combine_gathers_nights_as_hard_links(tmp_path):
 
     # combined/ is output, not a night: the index doesn't list it again.
     assert len(archive_index(root)) == 2
+
+
+def test_a_target_named_final_or_master_is_not_swallowed(tmp_path):
+    """The Seestar puts the target name in every sub's filename, so matching
+    "final"/"stacked"/"master" anywhere would make these targets vanish from
+    the index with no explanation."""
+    root = tmp_path / "seestar"
+    _seestar_night(root, "2026-10-04", "M31 final", ["20261004-210001", "20261004-210015"])
+    _seestar_night(root, "2026-10-04", "Master Ring", ["20261004-220001"])
+    # ...while the scope's own stack and the thumbnails still don't count
+    d = root / "2026-10-04" / "M31 final"
+    (d / "Stacked_2_M31 final_10.0s_LP_20261004-210015.fit").write_bytes(b"SIMPLE")
+    (d / "Light_M31 final_10.0s_LP_20261004-210001_thn.jpg").write_bytes(b"thn")
+
+    rows = {r.target: r.frames for r in archive_index(root)}
+    assert rows == {"M31 final": 2, "Master Ring": 1}

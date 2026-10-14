@@ -65,12 +65,21 @@ jobs:
       - name: Prove the bootloader is ours
         shell: pwsh
         run: |
-          # sha256 of runw.exe inside the official 6.22.3 win_amd64 wheel
-          $stock = "2291f269c3a3804f"
+          # The stock hash is DERIVED from the pinned version, never written
+          # down: a hardcoded prefix silently stops checking anything the
+          # moment PYINSTALLER_VERSION is bumped.
+          pip download --no-deps --only-binary :all: --platform win_amd64 `
+            --python-version 3.12 -d stockwheel "pyinstaller==$env:PYINSTALLER_VERSION"
+          $wheel = (Get-ChildItem stockwheel\*.whl)[0].FullName
+          Expand-Archive -Path $wheel -DestinationPath stockwheel\unpacked -Force
+          $stockExe = "stockwheel\unpacked\PyInstaller\bootloader\Windows-64bit-intel\runw.exe"
+          if (-not (Test-Path $stockExe)) { throw "couldn't find the stock runw.exe to compare against" }
+          $stock = (Get-FileHash $stockExe -Algorithm SHA256).Hash.ToLower()
           $p = python -c "import PyInstaller,pathlib; print(pathlib.Path(PyInstaller.__file__).parent/'bootloader'/'Windows-64bit-intel'/'runw.exe')"
           $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
-          Write-Host "bootloader runw.exe sha256: $h"
-          if ($h.StartsWith($stock)) { throw "bootloader is the stock wheel one -- the compile did not take" }
+          Write-Host "stock runw.exe sha256: $stock"
+          Write-Host "ours  runw.exe sha256: $h"
+          if ($h -eq $stock) { throw "bootloader is the stock wheel one -- the compile did not take" }
 
       - run: python make_version_info.py
       - run: pyinstaller --noconfirm --clean scopepull.spec
@@ -103,7 +112,10 @@ jobs:
             dist/notes.md
 
   pypi-publish:
-    needs: build
+    # windows-exe too: smoke_frozen.py is the only thing that runs a real pull
+    # before a release, and "nothing is released that hasn't pulled" should
+    # cover the wheel as well as the exe.
+    needs: [build, windows-exe]
     runs-on: ubuntu-latest
     environment:
       name: pypi

@@ -9,7 +9,7 @@ for a console script on a PATH that Explorer inherited at sign-in time.
 
 from __future__ import annotations
 
-from .cli import app
+from .cli import run
 
 if __name__ == "__main__":
-    app()
+    run()

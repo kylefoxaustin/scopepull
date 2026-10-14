@@ -14,7 +14,7 @@ previews, not data), the scope's own `Stacked_*.fit`, and the `Lunar_*`,
 come across — framing mode is real data, and StackingWizard tiles them.
 
 Lifted from starstack v0.3.0, verified there against Kyle's own S50 Pro over
-both USB (`D:\\MyWorks`) and Wi-Fi (`\\\\10.0.1.215\\EMMC Images`): 17 sessions,
+both USB (`D:\\MyWorks`) and Wi-Fi (`\\\\192.168.1.50\\EMMC Images`): 17 sessions,
 6h 17m. The one change on arrival is that the copy commits through
 fsutil.replace_retry, because this repo learned the hard way that Windows
 Defender holds a file open just long enough to fail the rename (0.1.1).
@@ -53,6 +53,10 @@ SEESTAR_SHARE = "EMMC Images"
 SEESTAR_HOSTS = ("seestar", "seestar.local")
 SEESTAR_SKIP = ("lunar_", "solar_", "_video")
 SUB_SUFFIX = "_sub"
+# Consecutive copy failures that mean "the scope went away" rather than "that
+# file is bad". Low enough to stop a 600-sub night quickly, high enough to ride
+# out a couple of genuinely unreadable frames.
+GIVE_UP_AFTER = 6
 FITS_SUFFIXES = (".fit", ".fits")
 _STAMP = re.compile(r"_(\d{4})(\d{2})(\d{2})-(\d{2})\d{4}")
 
@@ -66,7 +70,7 @@ NOT_FOUND_HELP = (
 
 def _is_pathish(spec: str) -> bool:
     """Did the user hand us a place or a name? `D:`, `D:\\`, `/media/seestar`
-    and `\\\\10.0.1.215\\EMMC Images` are places; `seestar` and `10.0.1.215`
+    and `\\\\192.168.1.50\\EMMC Images` are places; `seestar` and `192.168.1.50`
     are names to resolve."""
     return (
         spec.startswith("\\\\")
@@ -189,14 +193,25 @@ def night_of(name: str) -> str | None:
     return day.isoformat()
 
 
-def _sub_dirs(mw: Path) -> list[Path]:
-    return sorted(p for p in mw.iterdir() if p.is_dir() and p.name.lower().endswith(SUB_SUFFIX))
+def _sub_dirs(mw: Path) -> list[Path] | None:
+    """The `<target>_sub` folders, or None if MyWorks itself can't be read --
+    the scope is allowed to vanish between `find` and `pull` (USB unplugged,
+    Wi-Fi dropped), and that is an unreachable scope, not a crash."""
+    try:
+        return sorted(p for p in mw.iterdir() if p.is_dir() and p.name.lower().endswith(SUB_SUFFIX))
+    except OSError:
+        return None
 
 
 def pull_seestar(mw: Path, root: Path, log: Log, target: str | None = None) -> PullResult:
     """Copy every sub-frame the archive hasn't got. Read-only on the scope."""
     res = PullResult()
-    for sub in _sub_dirs(mw):
+    subdirs = _sub_dirs(mw)
+    if subdirs is None:
+        log(f"the scope stopped answering at {mw} — unplugged, or the Wi-Fi dropped.")
+        res.code = EXIT_UNREACHABLE
+        return res
+    for sub in subdirs:
         tname = sub.name[: -len(SUB_SUFFIX)]
         low = tname.lower()
         if any(k in low for k in SEESTAR_SKIP):
@@ -228,8 +243,16 @@ def pull_seestar(mw: Path, root: Path, log: Log, target: str | None = None) -> P
 
         log(f"  {tname}: {len(new)} new sub{'s' if len(new) != 1 else ''} of {len(subs)}")
         touched: set[Path] = set()
+        in_a_row = 0
         for i, (src, dest, night) in enumerate(new, 1):
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                # The archive side, not the scope: a full or read-only disk.
+                log(f"    can't make {dest.parent}: {e}")
+                res.failed.append(src.name)
+                res.code = EXIT_PARTIAL
+                return res
             part = dest.with_name(dest.name + ".part")
             try:
                 shutil.copyfile(src, part)
@@ -240,7 +263,19 @@ def pull_seestar(mw: Path, root: Path, log: Log, target: str | None = None) -> P
                 log(f"    {src.name}: {e}")
                 unlink_retry(part)
                 res.failed.append(src.name)
+                in_a_row += 1
+                # A dropped share fails every remaining sub, each one waiting out
+                # an SMB reconnect first. Six in a row is the scope leaving, not
+                # six bad files: stop and say so.
+                if in_a_row >= GIVE_UP_AFTER and not src.exists():
+                    log(
+                        f"  {tname}: {in_a_row} failures in a row and the scope is no longer "
+                        f"readable — stopping. What landed is in the archive; run it again."
+                    )
+                    res.code = EXIT_UNREACHABLE
+                    return res
                 continue
+            in_a_row = 0
             res.copied += 1
             res.nights.add(night)
             touched.add(dest.parent)

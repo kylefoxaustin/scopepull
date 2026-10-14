@@ -31,7 +31,7 @@ classifiers = [
 Repository = "https://github.com/kylefoxaustin/scopepull"
 
 [project.scripts]
-scopepull = "scopepull.cli:app"
+scopepull = "scopepull.cli:run"
 # The owl. Stdlib tkinter only, so no extra dependency buys it.
 scopepull-gui = "scopepull.gui:main"
 
@@ -51,6 +51,11 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+# The raw first-contact captures are test input nobody else can use, and the
+# sdist is a channel that a later history rewrite could never reach.
+exclude = ["tests/fixtures/live"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scopepull"]

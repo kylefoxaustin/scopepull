@@ -21,7 +21,7 @@ All of this is in `github.com/kylefoxaustin/starstack` at v0.3.0, MIT, written t
 - `pull_seestar(myworks, root, log, target)` -- for every `MyWorks/<target>_sub/`, copy each `.fit` the archive hasn't got (by name and size) into `<root>/<night>/<target>/` via `.part` + `os.replace`; night from the filename's timestamp with a noon cutover so a session across midnight is one night. Leaves on the scope: the `.jpg` twins, `_thn.jpg` thumbnails, the scope's own `Stacked_*.fit`, `Lunar_*` and `*_video` folders. `*_mosaic` targets are pulled (framing mode; StackingWizard tiles them). Read-only on the scope. Returns `(copied, skipped, nights)`.
 - `_seestar_night(name)` -- `Light_NGC 7000_10.0s_LP_20260922-203537.fit` → `2026-09-22`.
 
-Verified on Kyle's real S50 Pro over USB (`D:\MyWorks`) and over Wi-Fi (`\\10.0.1.215\EMMC Images`); 17 sessions, 6h 17m pulled so far. The S50 Pro's subs are 3840×2160 16-bit FITS, `BAYERPAT='GRBG'` (honest, unlike the Odyssey's), `XPIXSZ=2.9`, `FOCALLEN=260`, `RA`/`DEC` per frame, `FILTER` LP or IRCUT. The original S50 has the same `MyWorks` layout at 1080×1920.
+Verified on Kyle's real S50 Pro over USB (`D:\MyWorks`) and over Wi-Fi (`\\192.168.1.50\EMMC Images`); 17 sessions, 6h 17m pulled so far. The S50 Pro's subs are 3840×2160 16-bit FITS, `BAYERPAT='GRBG'` (honest, unlike the Odyssey's), `XPIXSZ=2.9`, `FOCALLEN=260`, `RA`/`DEC` per frame, `FILTER` LP or IRCUT. The original S50 has the same `MyWorks` layout at 1080×1920.
 
 **The archive as data** (`starstack.py`, block headed "the archive: what's been pulled, by target and night"):
 
@@ -67,8 +67,8 @@ The archive layout stays as each scope makes it today -- `~/Astro/odyssey/<night
 CLI surface after the move (existing commands unchanged; `pull` without `--scope` still means Odyssey):
 
 ```
-scopepull pull --scope seestar [--at D:|10.0.1.215|\\seestar\EMMC Images] [--target "M 31"]
-scopepull find --scope seestar          # "found on Wi-Fi at seestar (10.0.1.215)" / "none: ..."
+scopepull pull --scope seestar [--at D:|192.168.1.50|\\seestar\EMMC Images] [--target "M 31"]
+scopepull find --scope seestar          # "found on Wi-Fi at seestar (192.168.1.50)" / "none: ..."
 scopepull index [--scope seestar]       # JSON lines, what the window's table shows
 scopepull combine "NGC 7000" [--nights 2026-09-22,2026-10-06] [--scope seestar]
 scopepull gui                           # the owl (also the exe's default with no args)
